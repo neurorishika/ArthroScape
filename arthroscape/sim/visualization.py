@@ -100,10 +100,15 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def animate_enhanced_trajectory(self, sim_index: int = 0, interval: int = 50, save_path: str = None) -> None:
+    def animate_enhanced_trajectory(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5, save_path: str = None) -> None:
         """
         Enhanced animation: animate trajectories for all animals with heading arrows and antenna markers.
         Each animal is drawn in a unique color.
+        
+        :param sim_index: Index of the simulation replicate to animate.
+        :param interval: Delay between frames in milliseconds.
+        :param frame_skip: Only animate every Nth frame to speed up the animation.
+        :param save_path: If provided, save the animation (e.g., as a GIF).
         """
         result = self.sim_results[sim_index]
         cfg = self.config
@@ -126,13 +131,16 @@ class VisualizationPipeline:
         for idx in range(num):
             line, = ax.plot([], [], lw=0.5, color=colors[idx])
             traj_lines.append(line)
-            # Initialize antenna scatters.
             ls = ax.scatter([], [], s=[], c=[], cmap='viridis', edgecolors='k')
             rs = ax.scatter([], [], s=[], c=[], cmap='viridis', edgecolors='k')
             left_scatters.append(ls)
             right_scatters.append(rs)
         
         time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+        
+        # Define the frames to animate by skipping frames.
+        total_frames = len(result["trajectories"][0]["x"])
+        frames = range(0, total_frames, frame_skip)
         
         def init():
             for line in traj_lines:
@@ -154,11 +162,10 @@ class VisualizationPipeline:
                 x_data = traj["x"][:frame]
                 y_data = traj["y"][:frame]
                 traj_lines[idx].set_data(x_data, y_data)
-                # Current position and heading.
                 cur_x = traj["x"][frame-1]
                 cur_y = traj["y"][frame-1]
                 cur_heading = traj["heading"][frame-1]
-                # Update heading arrow
+                # Update heading arrow.
                 if heading_arrows[idx] is not None:
                     heading_arrows[idx].remove()
                 arrow_length = 1.5  # mm
@@ -189,8 +196,8 @@ class VisualizationPipeline:
             time_text.set_text(f"Frame: {frame}")
             return traj_lines + left_scatters + right_scatters + [time_text] + heading_arrows
         
-        ani = animation.FuncAnimation(fig, update, frames=len(result["trajectories"][0]["x"]),
-                                      init_func=init, interval=interval, blit=False)
+        ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
+                                    interval=interval, blit=False)
         if save_path:
             ani.save(save_path, writer='imagemagick')
         else:

@@ -58,7 +58,7 @@ def main():
         viz.plot_trajectories_with_odor(sim_index=0, show=True)
         viz.plot_final_odor_grid(show=True)
         viz.plot_odor_time_series(sim_index=0, show=True)
-        viz.animate_enhanced_trajectory(sim_index=0, interval=1)
+        viz.animate_enhanced_trajectory(sim_index=0, interval=1, frame_skip=30, save_path="trajectory_animation.gif")
 
 if __name__ == "__main__":
     main()
