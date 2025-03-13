@@ -226,14 +226,36 @@ class PeriodicSquareArena(GridArena):
         self.odor_grid[i % self.ny, j % self.nx] += odor
 
     def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
-        ksize = kernel.shape[0]
+        """
+        Vectorized deposition of a kernel onto the odor grid using np.roll.
+        This method avoids Python-level loops by embedding the kernel into a full-size
+        array and then rolling it so that the kernel’s center aligns with the deposition
+        position. This is efficient for periodic boundaries.
+        """
+        # Determine kernel size and its half-size.
+        ksize = kernel.shape[0]  # assumed to be odd
         half_size = ksize // 2
+
+        # Compute the grid position (i_center, j_center) for the deposit.
         i_center, j_center, _, _ = self._world_to_grid(x, y)
-        for di in range(-half_size, half_size + 1):
-            for dj in range(-half_size, half_size + 1):
-                i = (i_center + di) % self.ny
-                j = (j_center + dj) % self.nx
-                self.odor_grid[i, j] += kernel[di + half_size, dj + half_size]
+
+        # Create an empty array with the same shape as the odor grid.
+        deposit_array = np.zeros_like(self.odor_grid)
+
+        # Place the kernel in the top-left corner of the deposit_array.
+        deposit_array[:ksize, :ksize] = kernel
+
+        # Compute the shifts needed so that the kernel center (at index half_size, half_size)
+        # is moved to (i_center, j_center).
+        shift_i = i_center - half_size
+        shift_j = j_center - half_size
+
+        # Roll the deposit_array by the computed shifts along each axis.
+        deposit_array = np.roll(deposit_array, shift=(shift_i, shift_j), axis=(0, 1))
+
+        # Add the rolled kernel deposit to the odor grid.
+        self.odor_grid += deposit_array
+
 
     def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
         # In periodic arenas, use 'wrap' boundary mode.
