@@ -99,6 +99,9 @@ class VisualizationPipeline:
     def animate_trajectory(self, sim_index: int = 0, interval: int = 50, save_path: str = None) -> None:
         """
         Animate the fly's trajectory over time.
+        :param sim_index: Index of the simulation replicate to animate.
+        :param interval: Delay between frames in milliseconds.
+        :param save_path: If provided, save the animation (e.g., as a GIF).
         """
         result = self.sim_results[sim_index]
         fig, ax = plt.subplots(figsize=(8, 8))
@@ -108,31 +111,37 @@ class VisualizationPipeline:
         ax.set_ylabel("y (mm)")
         ax.set_title("Fly Trajectory Animation")
         ax.set_aspect('equal')
+        
         traj_line, = ax.plot([], [], lw=2, color="blue")
         start_point = ax.scatter([], [], color="green", label="Start")
         current_point = ax.scatter([], [], color="red", label="Current")
         time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+        
         def init():
             traj_line.set_data([], [])
-            start_point.set_offsets([])
-            current_point.set_offsets([])
+            # Use a 2D empty array for scatter offsets.
+            start_point.set_offsets(np.array([]).reshape(0,2))
+            current_point.set_offsets(np.array([]).reshape(0,2))
             time_text.set_text("")
             return traj_line, start_point, current_point, time_text
+        
         def update(frame):
             x_data = result["x"][:frame]
             y_data = result["y"][:frame]
             traj_line.set_data(x_data, y_data)
-            start_point.set_offsets([result["x"][0], result["y"][0]])
-            current_point.set_offsets([result["x"][frame-1], result["y"][frame-1]])
+            start_point.set_offsets(np.array([[result["x"][0], result["y"][0]]]))
+            current_point.set_offsets(np.array([[result["x"][frame-1], result["y"][frame-1]]]))
             time_text.set_text(f"Frame: {frame}")
             return traj_line, start_point, current_point, time_text
+        
         ani = animation.FuncAnimation(fig, update, frames=len(result["x"]), init_func=init,
-                                      interval=interval, blit=True)
+                                    interval=interval, blit=False)
         if save_path:
             ani.save(save_path, writer='imagemagick')
         else:
             plt.show()
         plt.close(fig)
+
 
     def animate_odor_grid(self, sim_index: int = 0, interval: int = 200, save_path: str = None) -> None:
         """

@@ -7,7 +7,7 @@ from arthroscape.sim.arena import create_circular_arena_with_annular_trail
 from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.odor_release import DefaultOdorRelease, ConstantOdorRelease
 from arthroscape.sim.runner import run_simulations, save_simulation_results
-from arthroscape.sim.visualization import visualize_simulation
+from arthroscape.sim.visualization import VisualizationPipeline  # update the import here
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -57,7 +57,14 @@ def main():
         save_simulation_results(simulation_results, args.save)
 
     if args.visualize:
-        visualize_simulation(simulation_results[0], config, arena)
+        # Create a VisualizationPipeline instance and use its methods.
+        viz = VisualizationPipeline(sim_results=simulation_results, config=config, arena=arena)
+        viz.plot_trajectory(sim_index=0, show=True)
+        viz.plot_final_odor_grid(show=True)
+        viz.plot_odor_time_series(sim_index=0, show=True)
+        # Optionally, animate trajectory or odor grid:
+        # viz.animate_trajectory(sim_index=0, interval=1)
+        # viz.animate_odor_grid(sim_index=0, interval=1)
 
 if __name__ == "__main__":
     main()
