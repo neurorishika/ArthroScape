@@ -6,7 +6,7 @@ from typing import Tuple, Sequence, Callable
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 1           # Total simulation time in seconds
+    T: float = 60 * 5           # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -42,7 +42,8 @@ class SimulationConfig:
 
     # Dynamic odor field parameters
     diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
-    odor_decay_rate: float = 0.000      # Decay rate per frame
+    odor_decay_tau: float = 60.0        # Decay time constant in seconds
+    odor_decay_rate: float = field(init=False)             # per frame
 
     # Grid arena parameters
     grid_x_min: float = -80.0
@@ -94,6 +95,13 @@ class SimulationConfig:
         self.rate_stop_to_walk_per_frame = self.rate_stop_to_walk / self.fps
         self.rate_walk_to_stop_per_frame = self.rate_walk_to_stop / self.fps
         self.total_frames = int(self.T * self.fps)
+
         # Compute kernel size from sigma and deposit_kernel_factor (round up to an odd integer)
         size = int(2 * np.ceil(self.deposit_kernel_factor * self.deposit_sigma / self.grid_resolution)) + 1
         self.deposit_kernel_size = size
+
+        # Compute odor decay rate per frame from the time constant
+        if self.odor_decay_tau == np.inf:
+            self.odor_decay_rate = 0.0
+        else:
+            self.odor_decay_rate = 1 - np.exp(-1.0 / self.fps / self.odor_decay_tau)
