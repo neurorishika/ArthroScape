@@ -81,17 +81,24 @@ class GridArena(Arena):
     
     def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
         """
-        Deposit a kernel (2D array) onto the odor grid centered at (x, y).
+        Deposit a kernel (2D array) onto the odor grid centered at (x, y) using vectorized slicing.
         """
         ksize = kernel.shape[0]  # assume square kernel with odd dimensions
         half_size = ksize // 2
         i_center, j_center, _, _ = self._world_to_grid(x, y)
-        for di in range(-half_size, half_size + 1):
-            for dj in range(-half_size, half_size + 1):
-                i = i_center + di
-                j = j_center + dj
-                if 0 <= i < self.ny and 0 <= j < self.nx:
-                    self.odor_grid[i, j] += kernel[di + half_size, dj + half_size]
+        # Determine slice bounds in the odor grid.
+        i0 = max(i_center - half_size, 0)
+        i1 = min(i_center + half_size + 1, self.ny)
+        j0 = max(j_center - half_size, 0)
+        j1 = min(j_center + half_size + 1, self.nx)
+        # Compute corresponding indices in the kernel.
+        ki0 = half_size - (i_center - i0)
+        kj0 = half_size - (j_center - j0)
+        ki1 = ki0 + (i1 - i0)
+        kj1 = kj0 + (j1 - j0)
+        # Add the kernel slice to the odor grid.
+        self.odor_grid[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
+
 
 
 

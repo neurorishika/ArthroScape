@@ -1,7 +1,7 @@
 # arthroscape/sim/config.py
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Sequence
 
 @dataclass
 class SimulationConfig:
@@ -24,13 +24,17 @@ class SimulationConfig:
 
     # Odor sensing parameters
     antennal_distance: float = 1.0    # legacy parameter (in mm)
-    # New: Antenna offsets in the fly's body frame (dx, dy) in mm.
+    # Antenna offsets in the fly's body frame (dx, dy) in mm.
     antenna_left_offset: Tuple[float, float] = (0.5, 0.5)   # shifted forward & left
     antenna_right_offset: Tuple[float, float] = (0.5, -0.5) # shifted forward & right
 
-    # Odor deposition kernel parameters (for odor release strategies that deposit a spread)
+    # Odor deposition kernel parameters
     deposit_sigma: float = 5.0         # Standard deviation (in mm) for the Gaussian deposit
-    deposit_kernel_size: int = 20       # Kernel size (number of grid cells, assumed odd)
+    deposit_kernel_factor: float = 3.0 # How many sigma to cover on each side
+    deposit_kernel_size: int = field(init=False)  # Computed automatically
+
+    # New: Odor deposition offsets in the fly's body frame (for where the odor is deposited)
+    odor_deposit_offsets: Sequence[Tuple[float, float]] = ((0, 0),)  # default deposits at the centroid
 
     # Grid arena parameters
     grid_x_min: float = -80.0
@@ -39,11 +43,11 @@ class SimulationConfig:
     grid_y_max: float = 80.0
     grid_resolution: float = 0.1       # mm per grid cell
 
-    # Odor history recording parameters (if you wish to record snapshots for animation)
-    record_odor_history: bool = False  # Set to True to record odor grid history
+    # Odor history recording parameters
+    record_odor_history: bool = False  # Set True to record odor grid history
     odor_history_interval: int = 100   # Record every N frames
 
-    # Derived parameters (computed automatically)
+    # Derived parameters
     walking_distance: float = field(init=False)          # mm per frame
     turn_rate_per_frame: float = field(init=False)         # probability per frame
     asymmetry_factor_per_frame: float = field(init=False)  # probability per frame
@@ -58,3 +62,6 @@ class SimulationConfig:
         self.rate_stop_to_walk_per_frame = self.rate_stop_to_walk / self.fps
         self.rate_walk_to_stop_per_frame = self.rate_walk_to_stop / self.fps
         self.total_frames = int(self.T * self.fps)
+        # Compute kernel size from sigma and deposit_kernel_factor (round up to an odd integer)
+        size = int(2 * np.ceil(self.deposit_kernel_factor * self.deposit_sigma / self.grid_resolution)) + 1
+        self.deposit_kernel_size = size
