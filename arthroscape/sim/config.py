@@ -7,7 +7,7 @@ from .directional_persistence import DirectionalPersistenceStrategy
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 0.5           # Total simulation time in seconds
+    T: float = 60 * 5          # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -34,7 +34,7 @@ class SimulationConfig:
     antenna_right_offset: Tuple[float, float] = (1.5, -0.5) # shifted forward & right
 
     # Odor deposition kernel parameters
-    deposit_sigma: float = 2.0         # Standard deviation (in mm) for the Gaussian deposit
+    deposit_sigma: float = 1.0         # Standard deviation (in mm) for the Gaussian deposit
     deposit_kernel_factor: float = 3.0 # How many sigma to cover on each side
     deposit_kernel_size: int = field(init=False)  # Computed automatically
 
@@ -54,7 +54,7 @@ class SimulationConfig:
     grid_x_max: float = 80.0
     grid_y_min: float = -80.0
     grid_y_max: float = 80.0
-    grid_resolution: float = 0.01       # mm per grid cell
+    grid_resolution: float = 0.1       # mm per grid cell
 
     # Odor history recording parameters
     record_odor_history: bool = False  # Set True to record odor grid history
@@ -109,6 +109,7 @@ class SimulationConfig:
 
         # Compute kernel size from sigma and deposit_kernel_factor (round up to an odd integer)
         size = int(2 * np.ceil(self.deposit_kernel_factor * self.deposit_sigma / self.grid_resolution)) + 1
+        print("size", size)
         self.deposit_kernel_size = size
 
         # Compute odor decay rate per frame from the time constant

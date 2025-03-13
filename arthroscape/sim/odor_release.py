@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from .config import SimulationConfig
 import numpy as np
 from functools import lru_cache
+from scipy.ndimage import shift  # Added for subpixel shifting
 
 @lru_cache(maxsize=32)
 def _get_normalized_gaussian_kernel(sigma: float, kernel_size: int, resolution: float) -> np.ndarray:
@@ -12,6 +13,7 @@ def _get_normalized_gaussian_kernel(sigma: float, kernel_size: int, resolution: 
     The kernel is computed over a square grid of size kernel_size x kernel_size (assumed odd).
     Sigma is expressed in mm; resolution is mm per grid cell.
     """
+    print(sigma, kernel_size, resolution)
     half_size = kernel_size // 2
     x = np.linspace(-half_size * resolution, half_size * resolution, kernel_size)
     y = np.linspace(-half_size * resolution, half_size * resolution, kernel_size)
@@ -58,16 +60,24 @@ class ConstantOdorRelease(OdorReleaseStrategy):
     Deposits a constant amount of pheromone with a Gaussian spread at each step.
     Uses deposit_offsets if provided; if not, uses config.odor_deposit_offsets.
     """
-    def __init__(self, deposit_amount: float = 0.5, sigma: float = None,
+    def __init__(self, config: SimulationConfig, deposit_amount: float = 0.5, sigma: float = None,
                  kernel_size: int = None, deposit_offsets: Sequence[Tuple[float, float]] = None):
         self.deposit_amount = deposit_amount
-        # If sigma not provided, use the config's default via later lookup.
-        self.sigma = sigma if sigma is not None else 5.0
-        self.kernel_size = kernel_size  # can be None to use config value
-        self.deposit_offsets = deposit_offsets  # if None, will use config.odor_deposit_offsets in release_odor
+        self.sigma = sigma if sigma is not None else config.deposit_sigma
+        self.kernel_size = kernel_size if kernel_size is not None else config.deposit_kernel_size
+        self.deposit_offsets = deposit_offsets if deposit_offsets is not None else config.odor_deposit_offsets
 
     def release_odor(self, state: int, position: Tuple[float, float], heading: float,
                      config: SimulationConfig, rng) -> List[DepositInstruction]:
+        """
+        Generate a list of DepositInstruction objects based on the provided offsets.
+        :param state: Current state of the animal.
+        :param position: Current position of the animal.
+        :param heading: Current heading of the animal.
+        :param config: Simulation configuration.
+        :param rng: Random number generator.
+        :return: List of DepositInstruction objects.
+        """
         offsets = self.deposit_offsets if self.deposit_offsets is not None else config.odor_deposit_offsets
         instructions = []
         for offset in offsets:

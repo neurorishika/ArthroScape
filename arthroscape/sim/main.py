@@ -18,8 +18,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def get_default_save_path(args) -> str:
     """Generate a default HDF5 file path under data/simulation/MM-DD-YY/{time}_{description}/results.h5"""
     date_str = datetime.now().strftime("%m-%d-%Y")
-    time_str = datetime.now().strftime("%H-%M")
-    description = f"{args.arena}_{args.odor_release}_n_{args.animals}x{args.replicates}_{time_str}"
+    time_str = datetime.now().strftime("%H-%M-%S")
+    description = f"{time_str}_arena-{args.arena}_rep-{args.replicates}_animals-{args.animals}_odor-{args.odor_release}"
     dir_path = os.path.join("data", "simulation", date_str, description)
     os.makedirs(dir_path, exist_ok=True)
     return os.path.join(dir_path, "results.h5")
@@ -58,7 +58,7 @@ def main():
                                                          arena_radius=75.0,
                                                          trail_radius=42.5,
                                                          trail_width=5.0,
-                                                         trail_odor=1.0)
+                                                         trail_odor=0.0)
     elif args.arena == "pbc":
         arena = PeriodicSquareArena(config.grid_x_min, config.grid_x_max,
                                     config.grid_y_min, config.grid_y_max,
@@ -70,7 +70,7 @@ def main():
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
     elif args.odor_release == "constant":
-        odor_release_strategy = ConstantOdorRelease(deposit_amount=args.deposit_amount)
+        odor_release_strategy = ConstantOdorRelease(config=config,deposit_amount=args.deposit_amount)
     else:
         raise ValueError("Unknown odor release strategy selected.")
 
