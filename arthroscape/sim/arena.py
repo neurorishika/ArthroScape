@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 from abc import ABC, abstractmethod
 from .config import SimulationConfig
 from scipy.signal import fftconvolve, convolve2d
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, uniform_filter
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +127,10 @@ class GridArena(Arena):
         kernel /= np.sum(kernel)
         return sigma_grid, kernel
 
-    def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
+    def update_odor_field(self, dt: float = 1.0, method: str = 'box_blur') -> None:
         """
         Update the odor grid to simulate diffusion and decay.
-        Supports methods: 'fft', 'convolve2d', 'gaussian_filter'.
+        Supports methods: 'fft', 'convolve2d', 'gaussian_filter', and 'box_blur'.
         
         Parameters:
             dt (float): Time step in seconds.
@@ -143,9 +143,10 @@ class GridArena(Arena):
         if not hasattr(self, '_diffusion_dt'):
             self._diffusion_dt = dt
 
+        # Compute or update the diffusion kernel and sigma if needed.
         if not hasattr(self, '_diffusion_kernel') or self._diffusion_dt != dt:
-            sigma, kernel = self._compute_diffusion_kernel(dt)
-            self._diffusion_sigma = sigma
+            sigma_grid, kernel = self._compute_diffusion_kernel(dt)
+            self._diffusion_sigma = sigma_grid
             self._diffusion_kernel = kernel
             self._diffusion_dt = dt
             logger.info(f"Computed and cached diffusion kernel for dt={dt}")
@@ -161,10 +162,23 @@ class GridArena(Arena):
             self.odor_grid = convolve2d(self.odor_grid, self._diffusion_kernel, mode='same', boundary='fill', fillvalue=0)
         elif method == 'gaussian_filter':
             self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='constant', cval=0)
+        elif method == 'box_blur':
+            # Use uniform_filter to approximate Gaussian blur by applying it three times.
+            # For a 1D box filter of width w, the variance is (w^2 - 1) / 12.
+            # Here we set the box filter width such that its variance approximates that of our Gaussian.
+            # A common heuristic is r = ceil(sigma * sqrt(3)), so kernel size = 2*r+1.
+            r = int(np.ceil(self._diffusion_sigma * np.sqrt(3)))
+            size = 2 * r + 1
+            # Apply the box filter three times for a better approximation.
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='constant', cval=0)
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='constant', cval=0)
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='constant', cval=0)
         else:
-            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', or 'gaussian_filter'.")
+            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', 'gaussian_filter', or 'box_blur'.")
 
+        # Finally, apply odor decay.
         self.odor_grid *= (1 - self.odor_decay_rate)
+
 
 def create_circular_arena_with_annular_trail(config: SimulationConfig,
                                              arena_radius: float = 75.0,
@@ -257,7 +271,7 @@ class PeriodicSquareArena(GridArena):
         self.odor_grid += deposit_array
 
 
-    def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
+    def update_odor_field(self, dt: float = 1.0, method: str = 'box_blur') -> None:
         # In periodic arenas, use 'wrap' boundary mode.
         if self.diffusion_coefficient == 0:
             self.odor_grid *= (1 - self.odor_decay_rate)
@@ -284,6 +298,13 @@ class PeriodicSquareArena(GridArena):
             self.odor_grid = convolve2d(self.odor_grid, self._diffusion_kernel, mode='same', boundary='wrap')
         elif method == 'gaussian_filter':
             self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='wrap')
+        elif method == 'box_blur':
+            # Use uniform_filter to approximate Gaussian blur by applying it three times.
+            r = int(np.ceil(self._diffusion_sigma * np.sqrt(3)))
+            size = 2 * r + 1
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
+            self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
         else:
             raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', or 'gaussian_filter'.")
         self.odor_grid *= (1 - self.odor_decay_rate)
