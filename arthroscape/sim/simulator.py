@@ -76,8 +76,10 @@ class MultiAnimalSimulator:
                     xs[a][i] = xs[a][i-1]
                     ys[a][i] = ys[a][i-1]
                 else:
-                    new_x = xs[a][i-1] + math.cos(headings[a][i]) * cfg.walking_distance
-                    new_y = ys[a][i-1] + math.sin(headings[a][i]) * cfg.walking_distance
+                    current_speed = cfg.walking_speed_sampler()
+                    walking_distance = current_speed / cfg.fps
+                    new_x = xs[a][i-1] + math.cos(headings[a][i]) * walking_distance
+                    new_y = ys[a][i-1] + math.sin(headings[a][i]) * walking_distance
                     if self.arena.is_free(new_x, new_y):
                         xs[a][i] = new_x
                         ys[a][i] = new_y

@@ -4,6 +4,7 @@ import math
 from typing import Optional, Tuple
 from abc import ABC, abstractmethod
 from .config import SimulationConfig
+from scipy.signal import convolve2d
 
 class Arena(ABC):
     @abstractmethod
@@ -23,7 +24,7 @@ class Arena(ABC):
 
 class GridArena(Arena):
     def __init__(self, x_min: float, x_max: float, y_min: float, y_max: float,
-                 resolution: float, wall_mask: Optional[np.ndarray] = None):
+                 resolution: float, wall_mask: Optional[np.ndarray] = None, config: Optional[SimulationConfig] = None):
         self.x_min = x_min
         self.x_max = x_max
         self.y_min = y_min
@@ -38,6 +39,12 @@ class GridArena(Arena):
             if wall_mask.shape != (self.ny, self.nx):
                 raise ValueError("Wall mask dimensions do not match grid.")
             self.wall_mask = wall_mask
+        if config is not None:
+            self.diffusion_coefficient = config.diffusion_coefficient
+            self.odor_decay_rate = config.odor_decay_rate
+        else:
+            self.diffusion_coefficient = 0.1
+            self.odor_decay_rate = 0.001
 
     def _world_to_grid(self, x: float, y: float) -> Tuple[int, int, float, float]:
         gx = (x - self.x_min) / self.resolution
@@ -98,6 +105,28 @@ class GridArena(Arena):
         kj1 = kj0 + (j1 - j0)
         # Add the kernel slice to the odor grid.
         self.odor_grid[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
+    
+    def update_odor_field(self) -> None:
+        """
+        Update the odor grid to simulate diffusion and decay.
+        Uses a Gaussian kernel as the diffusion kernel.
+        """
+        # Create a diffusion kernel.
+        # The kernel standard deviation is derived from the diffusion coefficient and grid resolution.
+        # dt = 1 / fps; variance = diffusion_coefficient * dt.
+        dt = 1.0  # one frame time step; could be refined
+        var = self.diffusion_coefficient * dt
+        sigma = np.sqrt(var) / self.resolution  # in grid units
+        kernel_size = int(2 * np.ceil(3 * sigma) + 1)
+        x = np.linspace(-kernel_size//2, kernel_size//2, kernel_size)
+        y = np.linspace(-kernel_size//2, kernel_size//2, kernel_size)
+        X, Y = np.meshgrid(x, y)
+        diffusion_kernel = np.exp(-(X**2 + Y**2) / (2 * sigma**2))
+        diffusion_kernel /= diffusion_kernel.sum()
+        # Convolve the odor grid with the diffusion kernel.
+        self.odor_grid = convolve2d(self.odor_grid, diffusion_kernel, mode='same', boundary='fill', fillvalue=0)
+        # Apply decay.
+        self.odor_grid *= (1 - self.odor_decay_rate)
 
 
 
@@ -110,7 +139,7 @@ def create_circular_arena_with_annular_trail(config: SimulationConfig,
     """Helper to create a circular arena with an annular trail preset in the odor grid."""
     arena = GridArena(config.grid_x_min, config.grid_x_max,
                       config.grid_y_min, config.grid_y_max,
-                      config.grid_resolution)
+                      config.grid_resolution, config=config)
     # Create coordinate grids.
     y_coords = np.linspace(config.grid_y_min, config.grid_y_max, arena.ny)
     x_coords = np.linspace(config.grid_x_min, config.grid_x_max, arena.nx)

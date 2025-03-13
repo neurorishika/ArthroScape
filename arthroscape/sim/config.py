@@ -1,7 +1,7 @@
 # arthroscape/sim/config.py
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Tuple, Sequence
+from typing import Tuple, Sequence, Callable
 
 @dataclass
 class SimulationConfig:
@@ -12,11 +12,15 @@ class SimulationConfig:
     # Motion parameters
     walking_speed: float = 15    # mm/s when walking
     rotation_diffusion: float = np.deg2rad(0.22)  # radians per frame
+    # Optional sampler for walking speed; if provided, this callable returns a speed at each step.
+    walking_speed_sampler: Callable[[], float] = None
 
     # Behavioral algorithm parameters (per second)
     turn_rate: float = 1.0       # Hz, base turning rate
     asymmetry_factor: float = 20 # Increases turn rate when odor asymmetry is high
     turn_magnitude_range: Tuple[float, float] = (np.deg2rad(8), np.deg2rad(30))  # radians
+    # Optional sampler for turn angle (if desired)
+    turn_angle_sampler: Callable[[], float] = None
 
     # State transition rates (per second)
     rate_stop_to_walk: float = 0.5    # Hz, from stop to walking
@@ -34,7 +38,11 @@ class SimulationConfig:
     deposit_kernel_size: int = field(init=False)  # Computed automatically
 
     # Odor deposition offsets (relative to the fly's centroid)
-    odor_deposit_offsets: Sequence[Tuple[float, float]] = ((-1.5, 0),)  # Default: deposit behind the fly
+    odor_deposit_offsets: Sequence[Tuple[float, float]] = ((-1.5, 0),)  # e.g. deposit behind the fly
+
+    # Dynamic odor field parameters
+    diffusion_coefficient: float = 0.1  # Diffusion coefficient (in mm^2/s)
+    odor_decay_rate: float = 0.001      # Decay rate per frame
 
     # Grid arena parameters
     grid_x_min: float = -80.0
@@ -47,7 +55,7 @@ class SimulationConfig:
     record_odor_history: bool = False  # Set True to record odor grid history
     odor_history_interval: int = 100   # Record every N frames
 
-    # New: Number of animals in the simulation.
+    # Number of animals
     number_of_animals: int = 1
 
     # Derived parameters
@@ -60,6 +68,13 @@ class SimulationConfig:
 
     def __post_init__(self):
         self.walking_distance = self.walking_speed / self.fps
+        if self.walking_speed_sampler is None:
+            # Default: fixed walking speed
+            self.walking_speed_sampler = lambda: self.walking_speed
+        if self.turn_angle_sampler is None:
+            # Default: sample uniformly between the given range
+            low, high = self.turn_magnitude_range
+            self.turn_angle_sampler = lambda: np.random.uniform(low, high)
         self.turn_rate_per_frame = self.turn_rate / self.fps
         self.asymmetry_factor_per_frame = self.asymmetry_factor / self.fps
         self.rate_stop_to_walk_per_frame = self.rate_stop_to_walk / self.fps
