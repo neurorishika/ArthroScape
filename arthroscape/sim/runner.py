@@ -8,11 +8,11 @@ from .config import SimulationConfig
 from .behavior import BehaviorAlgorithm
 from .arena import Arena
 from .odor_release import OdorReleaseStrategy
-from .simulator import FruitFlySimulator
+from .simulator import MultiAnimalSimulator
 
 def simulate_replicate(config: SimulationConfig, behavior: BehaviorAlgorithm, arena: Arena,
                        odor_release_strategy: OdorReleaseStrategy, seed: int = None) -> Dict[str, Any]:
-    simulator = FruitFlySimulator(config, behavior, arena, odor_release_strategy, seed)
+    simulator = MultiAnimalSimulator(config, behavior, arena, odor_release_strategy, seed)
     result = simulator.simulate()
     result["seed"] = seed
     return result

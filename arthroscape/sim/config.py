@@ -25,16 +25,16 @@ class SimulationConfig:
     # Odor sensing parameters
     antennal_distance: float = 1.0    # legacy parameter (in mm)
     # Antenna offsets in the fly's body frame (dx, dy) in mm.
-    antenna_left_offset: Tuple[float, float] = (0.5, 0.5)   # shifted forward & left
-    antenna_right_offset: Tuple[float, float] = (0.5, -0.5) # shifted forward & right
+    antenna_left_offset: Tuple[float, float] = (1.5, 0.5)   # shifted forward & left
+    antenna_right_offset: Tuple[float, float] = (1.5, -0.5) # shifted forward & right
 
     # Odor deposition kernel parameters
     deposit_sigma: float = 5.0         # Standard deviation (in mm) for the Gaussian deposit
     deposit_kernel_factor: float = 3.0 # How many sigma to cover on each side
     deposit_kernel_size: int = field(init=False)  # Computed automatically
 
-    # New: Odor deposition offsets in the fly's body frame (for where the odor is deposited)
-    odor_deposit_offsets: Sequence[Tuple[float, float]] = ((0, 0),)  # default deposits at the centroid
+    # Odor deposition offsets (relative to the fly's centroid)
+    odor_deposit_offsets: Sequence[Tuple[float, float]] = ((-1.5, 0),)  # Default: deposit behind the fly
 
     # Grid arena parameters
     grid_x_min: float = -80.0
@@ -46,6 +46,9 @@ class SimulationConfig:
     # Odor history recording parameters
     record_odor_history: bool = False  # Set True to record odor grid history
     odor_history_interval: int = 100   # Record every N frames
+
+    # New: Number of animals in the simulation.
+    number_of_animals: int = 1
 
     # Derived parameters
     walking_distance: float = field(init=False)          # mm per frame
