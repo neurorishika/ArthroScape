@@ -1,11 +1,12 @@
 # arthroscape/sim/arena.py
 import numpy as np
 import math
+import logging
 from typing import Optional, Tuple
 from abc import ABC, abstractmethod
 from .config import SimulationConfig
-from scipy.signal import fftconvolve
-import logging
+from scipy.signal import fftconvolve, convolve2d
+from scipy.ndimage import gaussian_filter
 
 class Arena(ABC):
     @abstractmethod
@@ -124,38 +125,49 @@ class GridArena(Arena):
         X, Y = np.meshgrid(ax, ay)
         kernel = np.exp(-(X**2 + Y**2) / (2 * sigma_grid**2))
         kernel /= np.sum(kernel)
-        return kernel
+        return sigma_grid, kernel
 
-    def update_odor_field(self, dt: float = 1.0) -> None:
+    def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
         """
         Update the odor grid to simulate diffusion and decay.
-        Uses a cached FFT-based diffusion kernel if available.
+        Supports three methods: 'fft' (default), 'convolve2d', and 'gaussian_filter'.
         
         Parameters:
             dt (float): Time step in seconds (typically 1/fps).
+            method (str): Method to use for convolution: 'fft', 'convolve2d', or 'gaussian_filter'.
         """
-        # If the kernel for this dt hasn't been computed, compute and cache it.
-        if not hasattr(self, '_diffusion_kernel_fft') or self._diffusion_dt != dt:
-            kernel = self._compute_diffusion_kernel(dt)
-            # Cache the FFT of the kernel.
-            self._diffusion_kernel_fft = np.fft.rfftn(kernel, s=self.odor_grid.shape)
+        if not hasattr(self, '_diffusion_dt'):
             self._diffusion_dt = dt
-            logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
 
         if self.diffusion_coefficient == 0:
             # No diffusion, only decay.
             self.odor_grid *= (1 - self.odor_decay_rate)
             return
         
-        # Use FFT-based convolution.
-        odor_fft = np.fft.rfftn(self.odor_grid)
-        convolved = np.fft.irfftn(odor_fft * self._diffusion_kernel_fft, s=self.odor_grid.shape)
-        self.odor_grid = convolved
+        # If the kernel for this dt hasn't been computed, compute and cache it.
+        if not hasattr(self, '_diffusion_kernel') or not hasattr(self, '_diffusion_sigma'):
+            sigma, kernel = self._compute_diffusion_kernel(dt)
+            self._diffusion_sigma = sigma
+            self._diffusion_kernel = kernel
+            logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
+
+        if method == 'fft':
+            if not hasattr(self, '_diffusion_kernel_fft'):
+                # Cache the FFT of the kernel.
+                self._diffusion_kernel_fft = np.fft.rfftn(self._diffusion_kernel, s=self.odor_grid.shape)
+                logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
+
+            odor_fft = np.fft.rfftn(self.odor_grid)
+            convolved = np.fft.irfftn(odor_fft * self._diffusion_kernel_fft, s=self.odor_grid.shape)
+            self.odor_grid = convolved
+        elif method == 'convolve2d':
+            self.odor_grid = convolve2d(self.odor_grid, self._diffusion_kernel, mode='same', boundary='fill', fillvalue=0)
+        elif method == 'gaussian_filter':
+            # Apply the Gaussian filter to simulate diffusion.
+            self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='constant', cval=0)
+            
         # Apply decay.
         self.odor_grid *= (1 - self.odor_decay_rate)
-
-
-
 
 
 

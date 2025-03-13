@@ -36,7 +36,7 @@ def main():
                                                      arena_radius=75.0,
                                                      trail_radius=42.5,
                                                      trail_width=5.0,
-                                                     trail_odor=0.0)
+                                                     trail_odor=1.0)
     # Select odor release strategy.
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
