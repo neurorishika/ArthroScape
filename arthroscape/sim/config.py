@@ -2,6 +2,7 @@
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Tuple, Sequence, Callable
+from .directional_persistence import DirectionalPersistenceStrategy
 
 @dataclass
 class SimulationConfig:
@@ -40,9 +41,13 @@ class SimulationConfig:
     # Odor deposition offsets (relative to the fly's centroid)
     odor_deposit_offsets: Sequence[Tuple[float, float]] = ((-1.5, 0),)  # e.g. deposit behind the fly
 
+    # Odor mask clamping parameters.
+    clamp_odor_mask: bool = False      # If True, wall/odor mask cells are clamped.
+    odor_mask_value: float = 0.0         # The value to which masked cells are clamped.
+
     # Dynamic odor field parameters
     diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
-    odor_decay_tau: float = 60.0        # Decay time constant in seconds
+    odor_decay_tau: float = np.inf        # Decay time constant in seconds
     odor_decay_rate: float = field(init=False)             # per frame
 
     # Grid arena parameters
@@ -59,14 +64,17 @@ class SimulationConfig:
     # Number of animals
     number_of_animals: int = 1
 
-    # NEW: Initial position sampler.
+    # Initial position sampler.
     # A callable that returns a tuple (x, y). If None, defaults to a normal distribution. with mean at (0, 0) and std grid_width/5
     initial_position_sampler: Callable[[], Tuple[float, float]] = None
 
-    # NEW: Initial heading sampler.
+    # Initial heading sampler.
     # A callable that returns a heading angle in radians. If None, defaults to a uniform sampler.
     initial_heading_sampler: Callable[[], float] = None
 
+    # New: Directional persistence strategy (if None, default fixed blend is used).
+    directional_persistence_strategy: DirectionalPersistenceStrategy = None
+        
     # Derived parameters
     turn_rate_per_frame: float = field(init=False)         # probability per frame
     asymmetry_factor_per_frame: float = field(init=False)  # probability per frame
@@ -105,3 +113,8 @@ class SimulationConfig:
             self.odor_decay_rate = 0.0
         else:
             self.odor_decay_rate = 1 - np.exp(-1.0 / self.fps / self.odor_decay_tau)
+
+        if self.directional_persistence_strategy is None:
+            # Default to a fixed blend with 50% persistence.
+            from .directional_persistence import FixedBlendPersistence
+            self.directional_persistence_strategy = FixedBlendPersistence(alpha=0.0)

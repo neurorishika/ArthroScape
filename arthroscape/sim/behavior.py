@@ -2,7 +2,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from .config import SimulationConfig
-
+from .directional_persistence import DirectionalPersistenceStrategy
 class BehaviorAlgorithm(ABC):
     @abstractmethod
     def update_state(self, prev_state: int, config: SimulationConfig, rng: np.random.Generator) -> int:
@@ -32,4 +32,9 @@ class DefaultBehavior(BehaviorAlgorithm):
             new_heading = prev_heading + turn_direction * turn_angle + rng.normal(0, config.rotation_diffusion)
         else:
             new_heading = prev_heading + rng.normal(0, config.rotation_diffusion)
-        return new_heading
+        
+        # Now adjust the heading using the persistence strategy.
+        adjusted_heading = config.directional_persistence_strategy.adjust_heading(
+            prev_heading, new_heading, odor_left, odor_right, config, rng
+        )
+        return adjusted_heading

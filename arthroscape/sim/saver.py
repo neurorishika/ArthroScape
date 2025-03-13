@@ -10,7 +10,7 @@ def save_simulation_results_hdf5(results: List[Dict], filename: str) -> None:
     Each replicate is stored as a group named 'replicate_i'.
     For each replicate:
       - 'final_odor_grid' dataset holds the final odor grid.
-      - 'trajectories' group holds per-animal data, with each animal stored as group 'animal_j' 
+      - 'trajectories' group holds per-animal data, with each animal stored as group 'animal_j'
         containing datasets:
           'x', 'y', 'heading', 'state', 'odor_left', 'odor_right'.
       - Optionally, if the result includes 'odor_grid_history', it is saved as a dataset.
@@ -36,6 +36,5 @@ def save_simulation_results_hdf5(results: List[Dict], filename: str) -> None:
             
             # Optionally, save odor grid history if it exists.
             if 'odor_grid_history' in result:
-                # Convert list of arrays to a 3D numpy array (time, ny, nx)
                 history = np.array(result['odor_grid_history'])
                 rep_group.create_dataset('odor_grid_history', data=history)

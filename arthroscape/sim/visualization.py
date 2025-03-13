@@ -8,6 +8,7 @@ from .config import SimulationConfig
 from .arena import GridArena
 from matplotlib.collections import LineCollection
 import logging
+import cv2  # OpenCV
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,6 @@ class VisualizationPipeline:
                 lc.set_linewidth(0.5)
                 ax.add_collection(lc)
             
-            # Optionally, plot a faint solid line.
-            # ax.plot(x_wrapped, y_wrapped, color=colors[idx], alpha=0.3)
-        
         ax.set_xlim(self.config.grid_x_min, self.config.grid_x_max)
         ax.set_ylim(self.config.grid_y_min, self.config.grid_y_max)
         ax.set_title("Fly Trajectories Colored by Average Odor")
@@ -157,14 +155,8 @@ class VisualizationPipeline:
     def animate_enhanced_trajectory(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5,
                                     save_path: str = None, wraparound: bool = False) -> None:
         """
-        Enhanced animation: animate trajectories for all animals with heading arrows and antenna markers.
+        Enhanced animation using Matplotlib: animate trajectories for all animals with heading arrows and antenna markers.
         When wraparound is True, trajectories are pre-segmented to avoid spurious connecting lines.
-        
-        :param sim_index: Index of the simulation replicate.
-        :param interval: Delay between frames in milliseconds.
-        :param frame_skip: Only animate every Nth frame.
-        :param save_path: Optional file path to save the animation.
-        :param wraparound: If True, pre-segment and wrap coordinates.
         """
         result = self.sim_results[sim_index]
         cfg = self.config
@@ -290,7 +282,115 @@ class VisualizationPipeline:
         ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
                                       interval=interval, blit=False)
         if save_path:
-            ani.save(save_path, writer='imagemagick')
+            ani.save(save_path, writer='imagemagick', fps=1000//interval)
         else:
             plt.show()
         plt.close(fig)
+
+    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5,
+                                           wraparound: bool = False, output_file: str = "animation.avi",
+                                           display: bool = False) -> None:
+        """
+        OpenCV-based animation: animate trajectories for all animals with heading arrows and antenna markers.
+        
+        Parameters:
+            sim_index (int): Index of the simulation replicate.
+            interval (int): Delay between frames in milliseconds. This sets the output fps as fps = 1000/interval.
+            frame_skip (int): Only process every Nth frame.
+            wraparound (bool): If True, wrap and segment trajectories to avoid spurious connecting lines.
+            output_file (str): Path to the output video file.
+            display (bool): If True, display the animation in an OpenCV window.
+        """
+        result = self.sim_results[sim_index]
+        cfg = self.config
+        
+        # Define output image dimensions (e.g., 800x800 pixels).
+        img_width, img_height = 800, 800
+        x_min, x_max = cfg.grid_x_min, cfg.grid_x_max
+        y_min, y_max = cfg.grid_y_min, cfg.grid_y_max
+        
+        def sim_to_pixel(x, y):
+            # Map simulation (x, y) to pixel (col, row) coordinates.
+            col = int((x - x_min) / (x_max - x_min) * img_width)
+            row = img_height - int((y - y_min) / (y_max - y_min) * img_height)
+            return col, row
+
+        # Pre-compute segmentation indices if wraparound is enabled.
+        seg_indices = []
+        if wraparound:
+            for traj in result["trajectories"]:
+                x = np.array(traj["x"])
+                y = np.array(traj["y"])
+                x_wrapped = wrap_coordinates(x, x_min, x_max)
+                y_wrapped = wrap_coordinates(y, y_min, y_max)
+                seg_idx = segment_trajectory_with_indices(x_wrapped, y_wrapped, x_min, x_max, y_min, y_max)
+                seg_indices.append(seg_idx)
+        else:
+            seg_indices = [ [(0, len(traj["x"]))] for traj in result["trajectories"] ]
+        
+        # Prepare the VideoWriter.
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        fps = 1000 // interval  # approximate fps from interval in ms
+        writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
+        
+        total_frames = len(result["trajectories"][0]["x"])
+        frames = range(0, total_frames, frame_skip)
+        
+        # For each frame, render the frame.
+        for frame in frames:
+            # Create a blank white image.
+            img = np.ones((img_height, img_width, 3), dtype=np.uint8) * 255
+            
+            # Draw trajectories.
+            for traj_idx, traj in enumerate(result["trajectories"]):
+                x = np.array(traj["x"])
+                y = np.array(traj["y"])
+                if wraparound:
+                    x = wrap_coordinates(x, x_min, x_max)
+                    y = wrap_coordinates(y, y_min, y_max)
+                # Use segmentation to avoid drawing spurious connecting lines.
+                segs = seg_indices[traj_idx]
+                for (start, end) in segs:
+                    if frame > start and end - start > 1:
+                        seg_end = min(end, frame)
+                        pts = np.array([sim_to_pixel(xx, yy) for xx, yy in zip(x[start:seg_end], y[start:seg_end])], dtype=np.int32)
+                        cv2.polylines(img, [pts], False, (0, 0, 255), thickness=1)
+            
+            # Draw heading arrow and antenna markers for each animal.
+            for traj in result["trajectories"]:
+                if frame < 1:
+                    continue
+                cur_idx = frame - 1
+                cur_x = traj["x"][cur_idx]
+                cur_y = traj["y"][cur_idx]
+                if wraparound:
+                    cur_x = wrap_coordinates(np.array([cur_x]), x_min, x_max)[0]
+                    cur_y = wrap_coordinates(np.array([cur_y]), y_min, y_max)[0]
+                col, row = sim_to_pixel(cur_x, cur_y)
+                cur_heading = traj["heading"][cur_idx]
+                arrow_length = 15  # in pixels
+                dx = int(arrow_length * math.cos(cur_heading))
+                dy = int(arrow_length * math.sin(cur_heading))
+                cv2.arrowedLine(img, (col, row), (col + dx, row - dy), (0, 255, 0), thickness=2)
+                # Draw antenna markers.
+                left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
+                left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
+                right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
+                right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
+                left_col, left_row = sim_to_pixel(cur_x + left_dx, cur_y + left_dy)
+                right_col, right_row = sim_to_pixel(cur_x + right_dx, cur_y + right_dy)
+                cv2.circle(img, (left_col, left_row), 3, (255, 0, 0), -1)
+                cv2.circle(img, (right_col, right_row), 3, (0, 0, 255), -1)
+            
+            # Optionally, display the frame.
+            if display:
+                cv2.imshow('Animation', img)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            
+            writer.write(img)
+        
+        writer.release()
+        if display:
+            cv2.destroyAllWindows()
+        logger.info(f"OpenCV animation saved to {output_file}")

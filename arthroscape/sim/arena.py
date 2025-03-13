@@ -138,6 +138,8 @@ class GridArena(Arena):
         """
         if self.diffusion_coefficient == 0:
             self.odor_grid *= (1 - self.odor_decay_rate)
+            if hasattr(self, 'base_odor'):
+                self.odor_grid = np.maximum(self.odor_grid, self.base_odor)
             return
         
         if not hasattr(self, '_diffusion_dt'):
@@ -179,6 +181,10 @@ class GridArena(Arena):
         # Finally, apply odor decay.
         self.odor_grid *= (1 - self.odor_decay_rate)
 
+        # Optionally clamp the odor grid if needed.
+        if hasattr(self, 'base_odor'):
+            self.odor_grid = np.maximum(self.odor_grid, self.base_odor)
+
 
 def create_circular_arena_with_annular_trail(config: SimulationConfig,
                                              arena_radius: float = 75.0,
@@ -198,6 +204,7 @@ def create_circular_arena_with_annular_trail(config: SimulationConfig,
     outer_bound = trail_radius + trail_width / 2
     annulus_mask = (distances >= inner_bound) & (distances <= outer_bound) & (~arena.wall_mask)
     arena.odor_grid[annulus_mask] = trail_odor
+    arena.base_odor = np.where(annulus_mask, trail_odor, 0.0)
     return arena
 
 # New class for periodic (toroidal) boundaries
@@ -267,6 +274,9 @@ class PeriodicSquareArena(GridArena):
         # In periodic arenas, use 'wrap' boundary mode.
         if self.diffusion_coefficient == 0:
             self.odor_grid *= (1 - self.odor_decay_rate)
+            # Optionally clamp the odor grid if needed.
+            if hasattr(self, 'base_odor'):
+                self.odor_grid = np.maximum(self.odor_grid, self.base_odor)
             return
 
         if not hasattr(self, '_diffusion_dt'):
@@ -299,3 +309,7 @@ class PeriodicSquareArena(GridArena):
         else:
             raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', 'gaussian_filter', or 'box_blur'.")
         self.odor_grid *= (1 - self.odor_decay_rate)
+        # Optionally clamp the odor grid if needed.
+        if hasattr(self, 'base_odor'):
+            self.odor_grid = np.maximum(self.odor_grid, self.base_odor)
+        
