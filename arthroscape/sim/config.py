@@ -58,6 +58,14 @@ class SimulationConfig:
     # Number of animals
     number_of_animals: int = 1
 
+    # NEW: Initial position sampler.
+    # A callable that returns a tuple (x, y). If None, defaults to a normal distribution. with mean at (0, 0) and std grid_width/5
+    initial_position_sampler: Callable[[], Tuple[float, float]] = None
+
+    # NEW: Initial heading sampler.
+    # A callable that returns a heading angle in radians. If None, defaults to a uniform sampler.
+    initial_heading_sampler: Callable[[], float] = None
+
     # Derived parameters
     turn_rate_per_frame: float = field(init=False)         # probability per frame
     asymmetry_factor_per_frame: float = field(init=False)  # probability per frame
@@ -73,6 +81,14 @@ class SimulationConfig:
             # Default: sample uniformly between the given range
             low, high = self.turn_magnitude_range
             self.turn_angle_sampler = lambda: np.random.uniform(low, high)
+        if self.initial_position_sampler is None:
+            # Default: sample from a normal distribution with std = grid_width/5
+            self.initial_position_sampler = lambda: (np.random.normal(0, (self.grid_x_max - self.grid_x_min) / 10),
+                                                     np.random.normal(0, (self.grid_y_max - self.grid_y_min) / 10))
+        if self.initial_heading_sampler is None:
+            # Default: sample uniformly between -pi and pi
+            self.initial_heading_sampler = lambda: np.random.uniform(-np.pi, np.pi) # radians
+            
         self.turn_rate_per_frame = self.turn_rate / self.fps
         self.asymmetry_factor_per_frame = self.asymmetry_factor / self.fps
         self.rate_stop_to_walk_per_frame = self.rate_stop_to_walk / self.fps

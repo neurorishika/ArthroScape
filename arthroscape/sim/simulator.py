@@ -32,9 +32,10 @@ class MultiAnimalSimulator:
         odor_left_arr = [[0.0] * N for _ in range(num)]
         odor_right_arr = [[0.0] * N for _ in range(num)]
 
-        # Initialize each animal with a random heading.
+        # Initialize each animal with a random heading and a random initial position.
         for a in range(num):
-            headings[a][0] = self.rng.uniform(0, 2 * math.pi)
+            headings[a][0] = cfg.initial_heading_sampler()
+            xs[a][0], ys[a][0] = cfg.initial_position_sampler()
 
         # Main simulation loop.
         progress_interval = max(1, N // 100)  # report every 1%
