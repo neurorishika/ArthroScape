@@ -23,7 +23,10 @@ class SimulationConfig:
     rate_walk_to_stop: float = 0.05   # Hz, from walking to stop
 
     # Odor sensing parameters
-    antennal_distance: float = 1.0    # mm, distance from the fly's center to each antenna
+    antennal_distance: float = 1.0    # mm, distance from the fly's center (legacy parameter)
+    # New: Antenna offsets in the fly's body frame (dx, dy) for left and right antennas.
+    antenna_left_offset: Tuple[float, float] = (0.5, 0.5)   # e.g. shifted forward & to the left
+    antenna_right_offset: Tuple[float, float] = (0.5, -0.5) # e.g. shifted forward & to the right
 
     # Grid arena parameters (for arbitrary walls and odor deposition)
     grid_x_min: float = -80.0

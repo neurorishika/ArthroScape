@@ -21,7 +21,6 @@ class Arena(ABC):
         """Deposit odor permanently at (x, y) on the grid."""
         pass
 
-
 class GridArena(Arena):
     def __init__(self, x_min: float, x_max: float, y_min: float, y_max: float,
                  resolution: float, wall_mask: Optional[np.ndarray] = None):
@@ -79,6 +78,21 @@ class GridArena(Arena):
         i = np.clip(i, 0, self.ny - 1)
         j = np.clip(j, 0, self.nx - 1)
         self.odor_grid[i, j] += odor
+    
+    def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
+        """
+        Deposit a kernel (2D array) onto the odor grid centered at (x, y).
+        """
+        ksize = kernel.shape[0]  # assume square kernel with odd dimensions
+        half_size = ksize // 2
+        i_center, j_center, _, _ = self._world_to_grid(x, y)
+        for di in range(-half_size, half_size + 1):
+            for dj in range(-half_size, half_size + 1):
+                i = i_center + di
+                j = j_center + dj
+                if 0 <= i < self.ny and 0 <= j < self.nx:
+                    self.odor_grid[i, j] += kernel[di + half_size, dj + half_size]
+
 
 
 def create_circular_arena_with_annular_trail(config: SimulationConfig,
