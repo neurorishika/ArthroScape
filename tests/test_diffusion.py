@@ -21,3 +21,6 @@ def test_diffusion_decay():
     new_total = arena.odor_grid.sum()
     # Check that some diffusion has occurred.
     assert new_total < initial_total
+
+if __name__ == "__main__":
+    pytest.main([__file__])

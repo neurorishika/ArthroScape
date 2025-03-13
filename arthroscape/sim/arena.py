@@ -208,9 +208,14 @@ class PeriodicSquareArena(GridArena):
     def __init__(self, x_min: float, x_max: float, y_min: float, y_max: float,
                  resolution: float, config: Optional[SimulationConfig] = None):
         # For periodic boundaries, we ignore wall masks.
-        super().__init__(x_min, x_max, y_min, y_max, resolution, wall_mask=np.zeros((int(np.ceil((y_max-y_min)/resolution))+1,
-                                                                                    int(np.ceil((x_max-x_min)/resolution))+1), dtype=bool),
-                         config=config)
+        super().__init__(
+            x_min, x_max, y_min, y_max, resolution,
+            wall_mask=np.zeros(
+                (int(np.ceil((y_max-y_min)/resolution))+1, int(np.ceil((x_max-x_min)/resolution))+1),
+                dtype=bool
+            ),
+            config=config
+        )
     
     def _world_to_grid(self, x: float, y: float) -> Tuple[int, int, float, float]:
         # Wrap coordinates using modulo arithmetic.
@@ -235,41 +240,28 @@ class PeriodicSquareArena(GridArena):
                 Q12 * (1-fi) * fj +
                 Q22 * fi * fj)
 
+    def is_free(self, x: float, y: float) -> bool:
+        # Override to wrap coordinates instead of checking against boundaries.
+        i, j, _, _ = self._world_to_grid(x, y)
+        return not self.wall_mask[i, j]
+
     def update_odor(self, x: float, y: float, odor: float) -> None:
         i, j, _, _ = self._world_to_grid(x, y)
-        self.odor_grid[i % self.ny, j % self.nx] += odor
+        self.odor_grid[i, j] += odor
 
     def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
         """
         Vectorized deposition of a kernel onto the odor grid using np.roll.
-        This method avoids Python-level loops by embedding the kernel into a full-size
-        array and then rolling it so that the kernel’s center aligns with the deposition
-        position. This is efficient for periodic boundaries.
         """
-        # Determine kernel size and its half-size.
-        ksize = kernel.shape[0]  # assumed to be odd
+        ksize = kernel.shape[0]  # assumed odd
         half_size = ksize // 2
-
-        # Compute the grid position (i_center, j_center) for the deposit.
         i_center, j_center, _, _ = self._world_to_grid(x, y)
-
-        # Create an empty array with the same shape as the odor grid.
         deposit_array = np.zeros_like(self.odor_grid)
-
-        # Place the kernel in the top-left corner of the deposit_array.
         deposit_array[:ksize, :ksize] = kernel
-
-        # Compute the shifts needed so that the kernel center (at index half_size, half_size)
-        # is moved to (i_center, j_center).
         shift_i = i_center - half_size
         shift_j = j_center - half_size
-
-        # Roll the deposit_array by the computed shifts along each axis.
         deposit_array = np.roll(deposit_array, shift=(shift_i, shift_j), axis=(0, 1))
-
-        # Add the rolled kernel deposit to the odor grid.
         self.odor_grid += deposit_array
-
 
     def update_odor_field(self, dt: float = 1.0, method: str = 'box_blur') -> None:
         # In periodic arenas, use 'wrap' boundary mode.
@@ -299,12 +291,11 @@ class PeriodicSquareArena(GridArena):
         elif method == 'gaussian_filter':
             self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='wrap')
         elif method == 'box_blur':
-            # Use uniform_filter to approximate Gaussian blur by applying it three times.
             r = int(np.ceil(self._diffusion_sigma * np.sqrt(3)))
             size = 2 * r + 1
             self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
             self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
             self.odor_grid = uniform_filter(self.odor_grid, size=size, mode='wrap')
         else:
-            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', or 'gaussian_filter'.")
+            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', 'gaussian_filter', or 'box_blur'.")
         self.odor_grid *= (1 - self.odor_decay_rate)

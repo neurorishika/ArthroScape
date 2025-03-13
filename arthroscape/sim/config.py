@@ -6,7 +6,7 @@ from typing import Tuple, Sequence, Callable
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 60           # Total simulation time in seconds
+    T: float = 60 * 1           # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters

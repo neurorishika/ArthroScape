@@ -13,6 +13,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Animal Fly Simulation in a Circular Arena")
+    parser.add_argument("--arena", type=str, default="circular", choices=["circular", "pbc"],
+                        help="Arena type: 'circular' or 'pbc'")
     parser.add_argument("--replicates", type=int, default=1, help="Number of simulation replicates")
     parser.add_argument("--animals", type=int, default=1, help="Number of animals per replicate")
     parser.add_argument("--parallel", action="store_true", help="Run simulations in parallel")
@@ -31,16 +33,20 @@ def main():
     # Get behavioral algorithm.
     behavior = DefaultBehavior()
 
-    # Create circular arena with an annular trail.
-    # arena = create_circular_arena_with_annular_trail(config,
-    #                                                  arena_radius=75.0,
-    #                                                  trail_radius=42.5,
-    #                                                  trail_width=5.0,
-    #                                                  trail_odor=1.0)
+    # Choose arena type.
+    if args.arena == "circular":
+        arena = create_circular_arena_with_annular_trail(config,
+                                                         arena_radius=75.0,
+                                                         trail_radius=42.5,
+                                                         trail_width=5.0,
+                                                         trail_odor=0.0)
+    elif args.arena == "pbc":
+        arena = PeriodicSquareArena(config.grid_x_min, config.grid_x_max,
+                                    config.grid_y_min, config.grid_y_max,
+                                    config.grid_resolution, config=config)
+    else:
+        raise ValueError("Unknown arena type selected.")
 
-    arena = PeriodicSquareArena(config.grid_x_min, config.grid_x_max,
-                            config.grid_y_min, config.grid_y_max,
-                            config.grid_resolution, config=config)
     # Select odor release strategy.
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
@@ -61,10 +67,10 @@ def main():
 
     if args.visualize:
         viz = VisualizationPipeline(sim_results=simulation_results, config=config, arena=arena)
-        viz.plot_trajectories_with_odor(sim_index=0, show=True)
+        viz.plot_trajectories_with_odor(sim_index=0, show=True, wraparound=True if args.arena == "pbc" else False)
         viz.plot_final_odor_grid(show=True)
         viz.plot_odor_time_series(sim_index=0, show=True)
-        viz.animate_enhanced_trajectory(sim_index=0, interval=1, frame_skip=30)
+        viz.animate_enhanced_trajectory(sim_index=0, interval=1, frame_skip=30, wraparound=True if args.arena == "pbc" else False)
 
 if __name__ == "__main__":
     main()
