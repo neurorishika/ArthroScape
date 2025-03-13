@@ -9,7 +9,7 @@ class SimulationConfig:
     T: float = 60 * 60           # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
-    # Fruitfly motion parameters
+    # Motion parameters
     walking_speed: float = 15    # mm/s when walking
     rotation_diffusion: float = np.deg2rad(0.22)  # radians per frame
 
@@ -23,17 +23,25 @@ class SimulationConfig:
     rate_walk_to_stop: float = 0.05   # Hz, from walking to stop
 
     # Odor sensing parameters
-    antennal_distance: float = 1.0    # mm, distance from the fly's center (legacy parameter)
-    # New: Antenna offsets in the fly's body frame (dx, dy) for left and right antennas.
-    antenna_left_offset: Tuple[float, float] = (0.5, 0.5)   # e.g. shifted forward & to the left
-    antenna_right_offset: Tuple[float, float] = (0.5, -0.5) # e.g. shifted forward & to the right
+    antennal_distance: float = 1.0    # legacy parameter (in mm)
+    # New: Antenna offsets in the fly's body frame (dx, dy) in mm.
+    antenna_left_offset: Tuple[float, float] = (0.5, 0.5)   # shifted forward & left
+    antenna_right_offset: Tuple[float, float] = (0.5, -0.5) # shifted forward & right
 
-    # Grid arena parameters (for arbitrary walls and odor deposition)
+    # Odor deposition kernel parameters (for odor release strategies that deposit a spread)
+    deposit_sigma: float = 5.0         # Standard deviation (in mm) for the Gaussian deposit
+    deposit_kernel_size: int = 20       # Kernel size (number of grid cells, assumed odd)
+
+    # Grid arena parameters
     grid_x_min: float = -80.0
     grid_x_max: float = 80.0
     grid_y_min: float = -80.0
     grid_y_max: float = 80.0
-    grid_resolution: float = 0.1      # mm per grid cell
+    grid_resolution: float = 0.1       # mm per grid cell
+
+    # Odor history recording parameters (if you wish to record snapshots for animation)
+    record_odor_history: bool = False  # Set to True to record odor grid history
+    odor_history_interval: int = 100   # Record every N frames
 
     # Derived parameters (computed automatically)
     walking_distance: float = field(init=False)          # mm per frame

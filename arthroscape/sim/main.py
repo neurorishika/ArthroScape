@@ -59,12 +59,10 @@ def main():
     if args.visualize:
         # Create a VisualizationPipeline instance and use its methods.
         viz = VisualizationPipeline(sim_results=simulation_results, config=config, arena=arena)
-        viz.plot_trajectory(sim_index=0, show=True)
+        viz.plot_trajectory_with_odor(sim_index=0, show=True)
         viz.plot_final_odor_grid(show=True)
         viz.plot_odor_time_series(sim_index=0, show=True)
-        # Optionally, animate trajectory or odor grid:
-        # viz.animate_trajectory(sim_index=0, interval=1)
-        # viz.animate_odor_grid(sim_index=0, interval=1)
+        viz.animate_enhanced_trajectory(sim_index=0, interval=1)
 
 if __name__ == "__main__":
     main()
