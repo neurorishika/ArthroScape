@@ -17,7 +17,7 @@ class SimulationConfig:
 
     # Behavioral algorithm parameters (per second)
     turn_rate: float = 1.0       # Hz, base turning rate
-    asymmetry_factor: float = 20 # Increases turn rate when odor asymmetry is high
+    asymmetry_factor: float = 100 # Increases turn rate when odor asymmetry is high
     turn_magnitude_range: Tuple[float, float] = (np.deg2rad(8), np.deg2rad(30))  # radians
     # Optional sampler for turn angle (if desired)
     turn_angle_sampler: Callable[[], float] = None
@@ -41,8 +41,8 @@ class SimulationConfig:
     odor_deposit_offsets: Sequence[Tuple[float, float]] = ((-1.5, 0),)  # e.g. deposit behind the fly
 
     # Dynamic odor field parameters
-    diffusion_coefficient: float = 0.1  # Diffusion coefficient (in mm^2/s)
-    odor_decay_rate: float = 0.001      # Decay rate per frame
+    diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
+    odor_decay_rate: float = 0.000      # Decay rate per frame
 
     # Grid arena parameters
     grid_x_min: float = -80.0
@@ -59,7 +59,6 @@ class SimulationConfig:
     number_of_animals: int = 1
 
     # Derived parameters
-    walking_distance: float = field(init=False)          # mm per frame
     turn_rate_per_frame: float = field(init=False)         # probability per frame
     asymmetry_factor_per_frame: float = field(init=False)  # probability per frame
     rate_stop_to_walk_per_frame: float = field(init=False) # probability per frame
@@ -67,7 +66,6 @@ class SimulationConfig:
     total_frames: int = field(init=False)
 
     def __post_init__(self):
-        self.walking_distance = self.walking_speed / self.fps
         if self.walking_speed_sampler is None:
             # Default: fixed walking speed
             self.walking_speed_sampler = lambda: self.walking_speed

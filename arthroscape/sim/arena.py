@@ -4,7 +4,8 @@ import math
 from typing import Optional, Tuple
 from abc import ABC, abstractmethod
 from .config import SimulationConfig
-from scipy.signal import convolve2d
+from scipy.signal import fftconvolve
+import logging
 
 class Arena(ABC):
     @abstractmethod
@@ -106,27 +107,54 @@ class GridArena(Arena):
         # Add the kernel slice to the odor grid.
         self.odor_grid[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
     
-    def update_odor_field(self) -> None:
+    def _compute_diffusion_kernel(self, dt: float) -> np.ndarray:
+        """
+        Compute and return the Gaussian diffusion kernel for the given time step dt.
+        This kernel is computed in grid units.
+        """
+        # Compute variance (in mm^2) for the given dt.
+        var = self.diffusion_coefficient * dt
+        diffusion_sigma_mm = np.sqrt(var)
+        # Convert sigma from mm to grid units.
+        sigma_grid = diffusion_sigma_mm / self.resolution
+        # Determine kernel size: cover ±3 sigma.
+        kernel_size = int(2 * np.ceil(3 * sigma_grid)) + 1
+        ax = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
+        ay = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
+        X, Y = np.meshgrid(ax, ay)
+        kernel = np.exp(-(X**2 + Y**2) / (2 * sigma_grid**2))
+        kernel /= np.sum(kernel)
+        return kernel
+
+    def update_odor_field(self, dt: float = 1.0) -> None:
         """
         Update the odor grid to simulate diffusion and decay.
-        Uses a Gaussian kernel as the diffusion kernel.
+        Uses a cached FFT-based diffusion kernel if available.
+        
+        Parameters:
+            dt (float): Time step in seconds (typically 1/fps).
         """
-        # Create a diffusion kernel.
-        # The kernel standard deviation is derived from the diffusion coefficient and grid resolution.
-        # dt = 1 / fps; variance = diffusion_coefficient * dt.
-        dt = 1.0  # one frame time step; could be refined
-        var = self.diffusion_coefficient * dt
-        sigma = np.sqrt(var) / self.resolution  # in grid units
-        kernel_size = int(2 * np.ceil(3 * sigma) + 1)
-        x = np.linspace(-kernel_size//2, kernel_size//2, kernel_size)
-        y = np.linspace(-kernel_size//2, kernel_size//2, kernel_size)
-        X, Y = np.meshgrid(x, y)
-        diffusion_kernel = np.exp(-(X**2 + Y**2) / (2 * sigma**2))
-        diffusion_kernel /= diffusion_kernel.sum()
-        # Convolve the odor grid with the diffusion kernel.
-        self.odor_grid = convolve2d(self.odor_grid, diffusion_kernel, mode='same', boundary='fill', fillvalue=0)
+        # If the kernel for this dt hasn't been computed, compute and cache it.
+        if not hasattr(self, '_diffusion_kernel_fft') or self._diffusion_dt != dt:
+            kernel = self._compute_diffusion_kernel(dt)
+            # Cache the FFT of the kernel.
+            self._diffusion_kernel_fft = np.fft.rfftn(kernel, s=self.odor_grid.shape)
+            self._diffusion_dt = dt
+            logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
+
+        if self.diffusion_coefficient == 0:
+            # No diffusion, only decay.
+            self.odor_grid *= (1 - self.odor_decay_rate)
+            return
+        
+        # Use FFT-based convolution.
+        odor_fft = np.fft.rfftn(self.odor_grid)
+        convolved = np.fft.irfftn(odor_fft * self._diffusion_kernel_fft, s=self.odor_grid.shape)
+        self.odor_grid = convolved
         # Apply decay.
         self.odor_grid *= (1 - self.odor_decay_rate)
+
+
 
 
 

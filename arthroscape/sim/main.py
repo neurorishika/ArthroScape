@@ -6,8 +6,8 @@ from arthroscape.sim.config import SimulationConfig
 from arthroscape.sim.arena import create_circular_arena_with_annular_trail
 from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.odor_release import DefaultOdorRelease, ConstantOdorRelease
-from arthroscape.sim.runner import run_simulations, save_simulation_results
-from arthroscape.sim.visualization import VisualizationPipeline  # or visualizer if using that module
+from arthroscape.sim.runner import run_simulations
+from arthroscape.sim.visualization import VisualizationPipeline
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -20,7 +20,8 @@ def main():
                         help="Odor release strategy: 'none', 'conditional', or 'constant'")
     parser.add_argument("--deposit_amount", type=float, default=0.5,
                         help="Deposit amount for constant odor release (pheromone)")
-    parser.add_argument("--save", type=str, default="", help="Filename to save results (e.g., results.npz)")
+    # The --save option now expects an HDF5 filename (e.g., results.h5)
+    parser.add_argument("--save", type=str, default="", help="Filename to save results as HDF5 (e.g., results.h5)")
     parser.add_argument("--visualize", action="store_true", help="Visualize simulation results")
     args = parser.parse_args()
 
@@ -35,7 +36,7 @@ def main():
                                                      arena_radius=75.0,
                                                      trail_radius=42.5,
                                                      trail_width=5.0,
-                                                     trail_odor=1.0)
+                                                     trail_odor=0.0)
     # Select odor release strategy.
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
@@ -51,14 +52,15 @@ def main():
 
     if args.save:
         os.makedirs(os.path.dirname(os.path.abspath(args.save)), exist_ok=True)
-        save_simulation_results(simulation_results, args.save)
+        from arthroscape.sim.saver import save_simulation_results_hdf5
+        save_simulation_results_hdf5(simulation_results, args.save)
 
     if args.visualize:
         viz = VisualizationPipeline(sim_results=simulation_results, config=config, arena=arena)
         viz.plot_trajectories_with_odor(sim_index=0, show=True)
         viz.plot_final_odor_grid(show=True)
         viz.plot_odor_time_series(sim_index=0, show=True)
-        viz.animate_enhanced_trajectory(sim_index=0, interval=1, frame_skip=30, save_path="trajectory_animation.gif")
+        viz.animate_enhanced_trajectory(sim_index=0, interval=1, frame_skip=30)
 
 if __name__ == "__main__":
     main()

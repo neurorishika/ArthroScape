@@ -86,10 +86,14 @@ class MultiAnimalSimulator:
                     else:
                         xs[a][i] = xs[a][i-1]
                         ys[a][i] = ys[a][i-1]
+            
+            if cfg.diffusion_coefficient > 0 or cfg.odor_decay_rate > 0:
+                dt = 1.0 / cfg.fps  # time step per frame
+                self.arena.update_odor_field(dt=dt)
 
             # Log progress every progress_interval frames.
             if i % progress_interval == 0:
-                logger.info(f"Replicate progress: frame {i}/{N}")
+                logger.info(f"Replicate progress: frame {i}/{N} ({i / N:.0%} done)")
 
         result = {
             "trajectories": [

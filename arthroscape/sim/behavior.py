@@ -24,11 +24,11 @@ class DefaultBehavior(BehaviorAlgorithm):
                        at_wall: bool, config: SimulationConfig, rng: np.random.Generator) -> float:
         turn_direction = 1 if odor_left > odor_right else (-1 if odor_left < odor_right else rng.choice([-1, 1]))
         if at_wall:
-            turn_angle = rng.uniform(*config.turn_magnitude_range)
+            turn_angle = config.turn_angle_sampler()
             new_heading = prev_heading + turn_direction * turn_angle + rng.normal(0, config.rotation_diffusion)
         elif rng.random() < (config.turn_rate_per_frame +
                              abs(odor_left - odor_right) * config.asymmetry_factor_per_frame):
-            turn_angle = rng.uniform(*config.turn_magnitude_range)
+            turn_angle = config.turn_angle_sampler()
             new_heading = prev_heading + turn_direction * turn_angle + rng.normal(0, config.rotation_diffusion)
         else:
             new_heading = prev_heading + rng.normal(0, config.rotation_diffusion)
