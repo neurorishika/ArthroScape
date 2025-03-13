@@ -288,75 +288,95 @@ class VisualizationPipeline:
         plt.close(fig)
 
     def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5,
-                                           wraparound: bool = False, output_file: str = "animation.avi",
-                                           display: bool = False) -> None:
+                                        wraparound: bool = False, output_file: str = "animation.mp4",
+                                        display: bool = False) -> None:
         """
-        OpenCV-based animation: animate trajectories for all animals with heading arrows and antenna markers.
+        OpenCV-based animation: animate trajectories for all animals with ellipse representations
+        (colored to match the trajectory) and odor sensor markers.
         
         Parameters:
             sim_index (int): Index of the simulation replicate.
-            interval (int): Delay between frames in milliseconds. This sets the output fps as fps = 1000/interval.
-            frame_skip (int): Only process every Nth frame.
+            interval (int): Delay between frames in milliseconds (FPS = 1000/interval).
+            frame_skip (int): Process every Nth frame.
             wraparound (bool): If True, wrap and segment trajectories to avoid spurious connecting lines.
             output_file (str): Path to the output video file.
             display (bool): If True, display the animation in an OpenCV window.
         """
         result = self.sim_results[sim_index]
         cfg = self.config
-        
-        # Define output image dimensions (e.g., 800x800 pixels).
-        img_width, img_height = 800, 800
         x_min, x_max = cfg.grid_x_min, cfg.grid_x_max
         y_min, y_max = cfg.grid_y_min, cfg.grid_y_max
-        
+
+        # get grid aspect ratio
+        aspect_ratio = (x_max - x_min) / (y_max - y_min)
+
+        # Set a higher resolution (e.g., 1920x1080).
+        img_width, img_height = 1920, int(1920 / aspect_ratio)
+
         def sim_to_pixel(x, y):
-            # Map simulation (x, y) to pixel (col, row) coordinates.
+            # Map simulation coordinates (x, y) to pixel coordinates (col, row).
             col = int((x - x_min) / (x_max - x_min) * img_width)
             row = img_height - int((y - y_min) / (y_max - y_min) * img_height)
             return col, row
+
+        # Generate distinct colors for each trajectory (BGR for OpenCV)
+        cmap = plt.cm.get_cmap('rainbow', len(result["trajectories"]))
+        colors = [tuple(int(255 * c) for c in cmap(i)[:3][::-1]) for i in range(len(result["trajectories"]))]
 
         # Pre-compute segmentation indices if wraparound is enabled.
         seg_indices = []
         if wraparound:
             for traj in result["trajectories"]:
-                x = np.array(traj["x"])
-                y = np.array(traj["y"])
-                x_wrapped = wrap_coordinates(x, x_min, x_max)
-                y_wrapped = wrap_coordinates(y, y_min, y_max)
+                x_arr = np.array(traj["x"])
+                y_arr = np.array(traj["y"])
+                x_wrapped = wrap_coordinates(x_arr, x_min, x_max)
+                y_wrapped = wrap_coordinates(y_arr, y_min, y_max)
                 seg_idx = segment_trajectory_with_indices(x_wrapped, y_wrapped, x_min, x_max, y_min, y_max)
                 seg_indices.append(seg_idx)
         else:
             seg_indices = [ [(0, len(traj["x"]))] for traj in result["trajectories"] ]
-        
+
         # Prepare the VideoWriter.
-        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        fps = 1000 // interval  # approximate fps from interval in ms
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = 1000 // interval  # approximate FPS
         writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
-        
+
         total_frames = len(result["trajectories"][0]["x"])
         frames = range(0, total_frames, frame_skip)
-        
-        # For each frame, render the frame.
+
+        # Parameters for drawing the animal's ellipse.
+        # Define ellipse axes in pixels (half-lengths).
+        ellipse_axes = (20, 10)  # Adjust for a higher resolution display.
+
+        # For time display, compute simulation time from frame index.
+        def format_time(frame_index: int) -> str:
+            t_seconds = frame_index / cfg.fps
+            hours = int(t_seconds // 3600)
+            minutes = int((t_seconds % 3600) // 60)
+            seconds = t_seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{seconds:05.2f}"
+
         for frame in frames:
             # Create a blank white image.
             img = np.ones((img_height, img_width, 3), dtype=np.uint8) * 255
-            
-            # Draw trajectories.
+
+            # Draw trajectories (with thin lines).
             for traj_idx, traj in enumerate(result["trajectories"]):
                 x = np.array(traj["x"])
                 y = np.array(traj["y"])
                 if wraparound:
                     x = wrap_coordinates(x, x_min, x_max)
                     y = wrap_coordinates(y, y_min, y_max)
-                # Use segmentation to avoid drawing spurious connecting lines.
                 segs = seg_indices[traj_idx]
                 for (start, end) in segs:
-                    if frame > start and end - start > 1:
+                    if frame > start and (end - start) > 1:
                         seg_end = min(end, frame)
                         pts = np.array([sim_to_pixel(xx, yy) for xx, yy in zip(x[start:seg_end], y[start:seg_end])], dtype=np.int32)
-                        cv2.polylines(img, [pts], False, (0, 0, 255), thickness=1)
-            
-            # Draw heading arrow and antenna markers for each animal.
+                        if pts.shape[0] >= 2:
+                            cv2.polylines(img, [pts], isClosed=False, color=colors[traj_idx],
+                                        thickness=1, lineType=cv2.LINE_AA)
+
+            # Draw each animal as an ellipse and sensor markers.
             for traj in result["trajectories"]:
                 if frame < 1:
                     continue
@@ -366,30 +386,43 @@ class VisualizationPipeline:
                 if wraparound:
                     cur_x = wrap_coordinates(np.array([cur_x]), x_min, x_max)[0]
                     cur_y = wrap_coordinates(np.array([cur_y]), y_min, y_max)[0]
-                col, row = sim_to_pixel(cur_x, cur_y)
+                center = sim_to_pixel(cur_x, cur_y)
                 cur_heading = traj["heading"][cur_idx]
-                arrow_length = 15  # in pixels
-                dx = int(arrow_length * math.cos(cur_heading))
-                dy = int(arrow_length * math.sin(cur_heading))
-                cv2.arrowedLine(img, (col, row), (col + dx, row - dy), (0, 255, 0), thickness=2)
-                # Draw antenna markers.
+                # OpenCV's ellipse function expects the angle in degrees (clockwise, so we use negative).
+                angle_deg = -math.degrees(cur_heading)
+                cv2.ellipse(img, center, ellipse_axes, angle_deg, 0, 360, colors[result["trajectories"].index(traj)], thickness=1, lineType=cv2.LINE_AA)
+                
+                # Draw sensor markers as circles.
                 left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
                 left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
                 right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
                 right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
-                left_col, left_row = sim_to_pixel(cur_x + left_dx, cur_y + left_dy)
-                right_col, right_row = sim_to_pixel(cur_x + right_dx, cur_y + right_dy)
-                cv2.circle(img, (left_col, left_row), 3, (255, 0, 0), -1)
-                cv2.circle(img, (right_col, right_row), 3, (0, 0, 255), -1)
+                left_x = cur_x + left_dx
+                left_y = cur_y + left_dy
+                right_x = cur_x + right_dx
+                right_y = cur_y + right_dy
+                left_center = sim_to_pixel(left_x, left_y)
+                right_center = sim_to_pixel(right_x, right_y)
+                odor_left = traj["odor_left"][cur_idx]
+                odor_right = traj["odor_right"][cur_idx]
+                # Scale marker radius by odor intensity.
+                radius_left = max(3, int(5 * odor_left))
+                radius_right = max(3, int(5 * odor_right))
+                cv2.circle(img, left_center, radius_left, color=(255, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
+                cv2.circle(img, right_center, radius_right, color=(0, 0, 255), thickness=-1, lineType=cv2.LINE_AA)
+
+            # Draw time information.
+            time_str = format_time(frame)
+            cv2.putText(img, f"Time: {time_str}", (10, img_height - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 50), thickness=2, lineType=cv2.LINE_AA)
             
-            # Optionally, display the frame.
             if display:
-                cv2.imshow('Animation', img)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                cv2.imshow('Simulation Animation', img)
+                if cv2.waitKey(interval) & 0xFF == ord('q'):
                     break
             
             writer.write(img)
-        
+
         writer.release()
         if display:
             cv2.destroyAllWindows()

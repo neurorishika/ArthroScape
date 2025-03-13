@@ -7,7 +7,7 @@ from .directional_persistence import DirectionalPersistenceStrategy
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 5           # Total simulation time in seconds
+    T: float = 60 * 0.5           # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -18,7 +18,7 @@ class SimulationConfig:
 
     # Behavioral algorithm parameters (per second)
     turn_rate: float = 1.0       # Hz, base turning rate
-    asymmetry_factor: float = 100 # Increases turn rate when odor asymmetry is high
+    asymmetry_factor: float = 20 # Increases turn rate when odor asymmetry is high
     turn_magnitude_range: Tuple[float, float] = (np.deg2rad(8), np.deg2rad(30))  # radians
     # Optional sampler for turn angle (if desired)
     turn_angle_sampler: Callable[[], float] = None
@@ -34,7 +34,7 @@ class SimulationConfig:
     antenna_right_offset: Tuple[float, float] = (1.5, -0.5) # shifted forward & right
 
     # Odor deposition kernel parameters
-    deposit_sigma: float = 5.0         # Standard deviation (in mm) for the Gaussian deposit
+    deposit_sigma: float = 2.0         # Standard deviation (in mm) for the Gaussian deposit
     deposit_kernel_factor: float = 3.0 # How many sigma to cover on each side
     deposit_kernel_size: int = field(init=False)  # Computed automatically
 
@@ -43,7 +43,6 @@ class SimulationConfig:
 
     # Odor mask clamping parameters.
     clamp_odor_mask: bool = False      # If True, wall/odor mask cells are clamped.
-    odor_mask_value: float = 0.0         # The value to which masked cells are clamped.
 
     # Dynamic odor field parameters
     diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
@@ -55,11 +54,12 @@ class SimulationConfig:
     grid_x_max: float = 80.0
     grid_y_min: float = -80.0
     grid_y_max: float = 80.0
-    grid_resolution: float = 0.1       # mm per grid cell
+    grid_resolution: float = 0.01       # mm per grid cell
 
     # Odor history recording parameters
     record_odor_history: bool = False  # Set True to record odor grid history
-    odor_history_interval: int = 100   # Record every N frames
+    odor_history_time_interval: int =  1 # seconds between history snapshots
+    odor_history_interval_frames: int = field(init=False)  # Computed automatically
 
     # Number of animals
     number_of_animals: int = 1
@@ -97,6 +97,9 @@ class SimulationConfig:
         if self.initial_heading_sampler is None:
             # Default: sample uniformly between -pi and pi
             self.initial_heading_sampler = lambda: np.random.uniform(-np.pi, np.pi) # radians
+
+        # Compute derived parameters
+        self.odor_history_interval_frames = int(self.odor_history_time_interval * self.fps)
             
         self.turn_rate_per_frame = self.turn_rate / self.fps
         self.asymmetry_factor_per_frame = self.asymmetry_factor / self.fps
