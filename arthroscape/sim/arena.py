@@ -8,6 +8,8 @@ from .config import SimulationConfig
 from scipy.signal import fftconvolve, convolve2d
 from scipy.ndimage import gaussian_filter
 
+logger = logging.getLogger(__name__)
+
 class Arena(ABC):
     @abstractmethod
     def get_odor(self, x: float, y: float) -> float:
@@ -22,6 +24,11 @@ class Arena(ABC):
     @abstractmethod
     def update_odor(self, x: float, y: float, odor: float) -> None:
         """Deposit odor permanently at (x, y) on the grid."""
+        pass
+
+    @abstractmethod
+    def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
+        """Update the odor grid (e.g. diffusion and decay)."""
         pass
 
 class GridArena(Arena):
@@ -87,7 +94,7 @@ class GridArena(Arena):
         i = np.clip(i, 0, self.ny - 1)
         j = np.clip(j, 0, self.nx - 1)
         self.odor_grid[i, j] += odor
-    
+
     def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
         """
         Deposit a kernel (2D array) onto the odor grid centered at (x, y) using vectorized slicing.
@@ -95,30 +102,23 @@ class GridArena(Arena):
         ksize = kernel.shape[0]  # assume square kernel with odd dimensions
         half_size = ksize // 2
         i_center, j_center, _, _ = self._world_to_grid(x, y)
-        # Determine slice bounds in the odor grid.
         i0 = max(i_center - half_size, 0)
         i1 = min(i_center + half_size + 1, self.ny)
         j0 = max(j_center - half_size, 0)
         j1 = min(j_center + half_size + 1, self.nx)
-        # Compute corresponding indices in the kernel.
         ki0 = half_size - (i_center - i0)
         kj0 = half_size - (j_center - j0)
         ki1 = ki0 + (i1 - i0)
         kj1 = kj0 + (j1 - j0)
-        # Add the kernel slice to the odor grid.
         self.odor_grid[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
-    
-    def _compute_diffusion_kernel(self, dt: float) -> np.ndarray:
+
+    def _compute_diffusion_kernel(self, dt: float) -> Tuple[float, np.ndarray]:
         """
-        Compute and return the Gaussian diffusion kernel for the given time step dt.
-        This kernel is computed in grid units.
+        Compute and return the Gaussian diffusion kernel (and sigma in grid units) for the given dt.
         """
-        # Compute variance (in mm^2) for the given dt.
         var = self.diffusion_coefficient * dt
         diffusion_sigma_mm = np.sqrt(var)
-        # Convert sigma from mm to grid units.
         sigma_grid = diffusion_sigma_mm / self.resolution
-        # Determine kernel size: cover ±3 sigma.
         kernel_size = int(2 * np.ceil(3 * sigma_grid)) + 1
         ax = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
         ay = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
@@ -130,46 +130,41 @@ class GridArena(Arena):
     def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
         """
         Update the odor grid to simulate diffusion and decay.
-        Supports three methods: 'fft' (default), 'convolve2d', and 'gaussian_filter'.
+        Supports methods: 'fft', 'convolve2d', 'gaussian_filter'.
         
         Parameters:
-            dt (float): Time step in seconds (typically 1/fps).
-            method (str): Method to use for convolution: 'fft', 'convolve2d', or 'gaussian_filter'.
+            dt (float): Time step in seconds.
+            method (str): Convolution method to use.
         """
-        if not hasattr(self, '_diffusion_dt'):
-            self._diffusion_dt = dt
-
         if self.diffusion_coefficient == 0:
-            # No diffusion, only decay.
             self.odor_grid *= (1 - self.odor_decay_rate)
             return
         
-        # If the kernel for this dt hasn't been computed, compute and cache it.
-        if not hasattr(self, '_diffusion_kernel') or not hasattr(self, '_diffusion_sigma'):
+        if not hasattr(self, '_diffusion_dt'):
+            self._diffusion_dt = dt
+
+        if not hasattr(self, '_diffusion_kernel') or self._diffusion_dt != dt:
             sigma, kernel = self._compute_diffusion_kernel(dt)
             self._diffusion_sigma = sigma
             self._diffusion_kernel = kernel
-            logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
+            self._diffusion_dt = dt
+            logger.info(f"Computed and cached diffusion kernel for dt={dt}")
 
         if method == 'fft':
             if not hasattr(self, '_diffusion_kernel_fft'):
-                # Cache the FFT of the kernel.
                 self._diffusion_kernel_fft = np.fft.rfftn(self._diffusion_kernel, s=self.odor_grid.shape)
-                logging.info(f"Computed and cached diffusion kernel for dt={dt} s")
-
+                logger.info("Computed and cached FFT of diffusion kernel.")
             odor_fft = np.fft.rfftn(self.odor_grid)
             convolved = np.fft.irfftn(odor_fft * self._diffusion_kernel_fft, s=self.odor_grid.shape)
             self.odor_grid = convolved
         elif method == 'convolve2d':
             self.odor_grid = convolve2d(self.odor_grid, self._diffusion_kernel, mode='same', boundary='fill', fillvalue=0)
         elif method == 'gaussian_filter':
-            # Apply the Gaussian filter to simulate diffusion.
             self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='constant', cval=0)
-            
-        # Apply decay.
+        else:
+            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', or 'gaussian_filter'.")
+
         self.odor_grid *= (1 - self.odor_decay_rate)
-
-
 
 def create_circular_arena_with_annular_trail(config: SimulationConfig,
                                              arena_radius: float = 75.0,
@@ -180,15 +175,93 @@ def create_circular_arena_with_annular_trail(config: SimulationConfig,
     arena = GridArena(config.grid_x_min, config.grid_x_max,
                       config.grid_y_min, config.grid_y_max,
                       config.grid_resolution, config=config)
-    # Create coordinate grids.
     y_coords = np.linspace(config.grid_y_min, config.grid_y_max, arena.ny)
     x_coords = np.linspace(config.grid_x_min, config.grid_x_max, arena.nx)
     X, Y = np.meshgrid(x_coords, y_coords)
     distances = np.sqrt(X**2 + Y**2)
-    # Set cells outside the circular arena as walls.
     arena.wall_mask = distances > arena_radius
     inner_bound = trail_radius - trail_width / 2
     outer_bound = trail_radius + trail_width / 2
     annulus_mask = (distances >= inner_bound) & (distances <= outer_bound) & (~arena.wall_mask)
     arena.odor_grid[annulus_mask] = trail_odor
     return arena
+
+# New class for periodic (toroidal) boundaries
+class PeriodicSquareArena(GridArena):
+    """
+    A square arena with periodic (toroidal) boundary conditions.
+    """
+    def __init__(self, x_min: float, x_max: float, y_min: float, y_max: float,
+                 resolution: float, config: Optional[SimulationConfig] = None):
+        # For periodic boundaries, we ignore wall masks.
+        super().__init__(x_min, x_max, y_min, y_max, resolution, wall_mask=np.zeros((int(np.ceil((y_max-y_min)/resolution))+1,
+                                                                                    int(np.ceil((x_max-x_min)/resolution))+1), dtype=bool),
+                         config=config)
+    
+    def _world_to_grid(self, x: float, y: float) -> Tuple[int, int, float, float]:
+        # Wrap coordinates using modulo arithmetic.
+        gx = (x - self.x_min) / self.resolution
+        gy = (y - self.y_min) / self.resolution
+        j = int(np.floor(gx)) % self.nx
+        i = int(np.floor(gy)) % self.ny
+        fi = gx - np.floor(gx)
+        fj = gy - np.floor(gy)
+        return i, j, fi, fj
+
+    def get_odor(self, x: float, y: float) -> float:
+        i, j, fi, fj = self._world_to_grid(x, y)
+        i1 = (i + 1) % self.ny
+        j1 = (j + 1) % self.nx
+        Q11 = self.odor_grid[i, j]
+        Q21 = self.odor_grid[i, j1]
+        Q12 = self.odor_grid[i1, j]
+        Q22 = self.odor_grid[i1, j1]
+        return (Q11 * (1-fi) * (1-fj) +
+                Q21 * fi * (1-fj) +
+                Q12 * (1-fi) * fj +
+                Q22 * fi * fj)
+
+    def update_odor(self, x: float, y: float, odor: float) -> None:
+        i, j, _, _ = self._world_to_grid(x, y)
+        self.odor_grid[i % self.ny, j % self.nx] += odor
+
+    def deposit_odor_kernel(self, x: float, y: float, kernel: np.ndarray) -> None:
+        ksize = kernel.shape[0]
+        half_size = ksize // 2
+        i_center, j_center, _, _ = self._world_to_grid(x, y)
+        for di in range(-half_size, half_size + 1):
+            for dj in range(-half_size, half_size + 1):
+                i = (i_center + di) % self.ny
+                j = (j_center + dj) % self.nx
+                self.odor_grid[i, j] += kernel[di + half_size, dj + half_size]
+
+    def update_odor_field(self, dt: float = 1.0, method: str = 'gaussian_filter') -> None:
+        # In periodic arenas, use 'wrap' boundary mode.
+        if self.diffusion_coefficient == 0:
+            self.odor_grid *= (1 - self.odor_decay_rate)
+            return
+
+        if not hasattr(self, '_diffusion_dt'):
+            self._diffusion_dt = dt
+
+        if not hasattr(self, '_diffusion_kernel') or self._diffusion_dt != dt:
+            sigma, kernel = self._compute_diffusion_kernel(dt)
+            self._diffusion_sigma = sigma
+            self._diffusion_kernel = kernel
+            self._diffusion_dt = dt
+            logger.info(f"(Periodic) Computed and cached diffusion kernel for dt={dt}")
+
+        if method == 'fft':
+            if not hasattr(self, '_diffusion_kernel_fft'):
+                self._diffusion_kernel_fft = np.fft.rfftn(self._diffusion_kernel, s=self.odor_grid.shape)
+                logger.info(f"(Periodic) Computed and cached FFT of diffusion kernel for dt={dt}")
+            odor_fft = np.fft.rfftn(self.odor_grid)
+            convolved = np.fft.irfftn(odor_fft * self._diffusion_kernel_fft, s=self.odor_grid.shape)
+            self.odor_grid = convolved
+        elif method == 'convolve2d':
+            self.odor_grid = convolve2d(self.odor_grid, self._diffusion_kernel, mode='same', boundary='wrap')
+        elif method == 'gaussian_filter':
+            self.odor_grid = gaussian_filter(self.odor_grid, sigma=self._diffusion_sigma, mode='wrap')
+        else:
+            raise ValueError("Unknown diffusion method: choose 'fft', 'convolve2d', or 'gaussian_filter'.")
+        self.odor_grid *= (1 - self.odor_decay_rate)

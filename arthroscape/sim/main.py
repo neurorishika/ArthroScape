@@ -3,7 +3,7 @@ import argparse
 import os
 import logging
 from arthroscape.sim.config import SimulationConfig
-from arthroscape.sim.arena import create_circular_arena_with_annular_trail
+from arthroscape.sim.arena import create_circular_arena_with_annular_trail, PeriodicSquareArena
 from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.odor_release import DefaultOdorRelease, ConstantOdorRelease
 from arthroscape.sim.runner import run_simulations
@@ -32,11 +32,15 @@ def main():
     behavior = DefaultBehavior()
 
     # Create circular arena with an annular trail.
-    arena = create_circular_arena_with_annular_trail(config,
-                                                     arena_radius=75.0,
-                                                     trail_radius=42.5,
-                                                     trail_width=5.0,
-                                                     trail_odor=1.0)
+    # arena = create_circular_arena_with_annular_trail(config,
+    #                                                  arena_radius=75.0,
+    #                                                  trail_radius=42.5,
+    #                                                  trail_width=5.0,
+    #                                                  trail_odor=1.0)
+
+    arena = PeriodicSquareArena(config.grid_x_min, config.grid_x_max,
+                            config.grid_y_min, config.grid_y_max,
+                            config.grid_resolution, config=config)
     # Select odor release strategy.
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
