@@ -110,10 +110,11 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def plot_final_odor_grid(self, downsample_factor: int = 1, show: bool = True,
+    def plot_final_odor_grid(self, sim_index: int = 0, downsample_factor: int = 1, show: bool = True,
                              save_path: str = None) -> None:
         """Plot the final odor grid as a heatmap."""
-        odor_grid = self.arena.odor_grid
+        result = self.sim_results[sim_index]
+        odor_grid = result["final_odor_grid"]
         if downsample_factor > 1:
             odor_grid = odor_grid[::downsample_factor, ::downsample_factor]
             extent = [self.config.grid_x_min, self.config.grid_x_max,

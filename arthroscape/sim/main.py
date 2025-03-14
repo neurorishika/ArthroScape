@@ -111,11 +111,11 @@ def main():
             # Save odor time series plot.
             odor_ts_path = os.path.join(rep_plots_dir, "odor_time_series.png")
             viz.plot_odor_time_series(sim_index=rep_index, show=False, save_path=odor_ts_path)
-            # Save animation.
-            animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
-            viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, fps=config.fps, frame_skip=8,
-                                            output_file=animation_path,
-                                            wraparound=True if args.arena == "pbc" else False)
+            # # Save animation.
+            # animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
+            # viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, fps=config.fps, frame_skip=30,
+            #                                 output_file=animation_path,
+            #                                 wraparound=True if args.arena == "pbc" else False)
             logger.info(f"Saved plots and animation for replicate {rep_index} in {rep_plots_dir}")
 
 if __name__ == "__main__":

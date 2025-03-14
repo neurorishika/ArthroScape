@@ -1,14 +1,44 @@
 # arthroscape/sim/config.py
+import functools
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Tuple, Sequence, Callable
 from .directional_persistence import DirectionalPersistenceStrategy
 from .odor_perception import AgentOdorPerception, NoAdaptationPerception
 
+# Define top-level helper functions that are pickleable.
+def _return_walking_speed(walking_speed: float) -> float:
+    return walking_speed
+
+def get_walking_speed_sampler(walking_speed: float) -> Callable[[], float]:
+    return functools.partial(_return_walking_speed, walking_speed)
+
+def _sample_turn_angle(low: float, high: float) -> float:
+    return np.random.uniform(low, high)
+
+def get_turn_angle_sampler(low: float, high: float) -> Callable[[], float]:
+    return functools.partial(_sample_turn_angle, low, high)
+
+def _sample_initial_position(grid_x_min: float, grid_x_max: float,
+                             grid_y_min: float, grid_y_max: float) -> Tuple[float, float]:
+    std_x = (grid_x_max - grid_x_min) / 10
+    std_y = (grid_y_max - grid_y_min) / 10
+    return (np.random.normal(0, std_x), np.random.normal(0, std_y))
+
+def get_initial_position_sampler(grid_x_min: float, grid_x_max: float,
+                                 grid_y_min: float, grid_y_max: float) -> Callable[[], Tuple[float, float]]:
+    return functools.partial(_sample_initial_position, grid_x_min, grid_x_max, grid_y_min, grid_y_max)
+
+def _sample_initial_heading() -> float:
+    return np.random.uniform(-np.pi, np.pi)
+
+def get_initial_heading_sampler() -> Callable[[], float]:
+    return _sample_initial_heading
+
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 60         # Total simulation time in seconds
+    T: float = 60 * 10         # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -52,7 +82,7 @@ class SimulationConfig:
 
     # Dynamic odor field parameters
     diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
-    odor_decay_tau: float = np.inf        # Decay time constant in seconds
+    odor_decay_tau: float = np.inf       # Decay time constant in seconds
     odor_decay_rate: float = field(init=False)             # per frame
 
     # Grid arena parameters
@@ -90,19 +120,16 @@ class SimulationConfig:
 
     def __post_init__(self):
         if self.walking_speed_sampler is None:
-            # Default: fixed walking speed
-            self.walking_speed_sampler = lambda: self.walking_speed
+            self.walking_speed_sampler = get_walking_speed_sampler(self.walking_speed)
         if self.turn_angle_sampler is None:
-            # Default: sample uniformly between the given range
             low, high = self.turn_magnitude_range
-            self.turn_angle_sampler = lambda: np.random.uniform(low, high)
+            self.turn_angle_sampler = get_turn_angle_sampler(low, high)
         if self.initial_position_sampler is None:
-            # Default: sample from a normal distribution with std = grid_width/5
-            self.initial_position_sampler = lambda: (np.random.normal(0, (self.grid_x_max - self.grid_x_min) / 10),
-                                                     np.random.normal(0, (self.grid_y_max - self.grid_y_min) / 10))
+            self.initial_position_sampler = get_initial_position_sampler(
+                self.grid_x_min, self.grid_x_max, self.grid_y_min, self.grid_y_max
+            )
         if self.initial_heading_sampler is None:
-            # Default: sample uniformly between -pi and pi
-            self.initial_heading_sampler = lambda: np.random.uniform(-np.pi, np.pi) # radians
+            self.initial_heading_sampler = get_initial_heading_sampler()
 
         # Compute derived parameters
         self.odor_history_interval_frames = int(self.odor_history_time_interval * self.fps)

@@ -13,7 +13,6 @@ def _get_normalized_gaussian_kernel(sigma: float, kernel_size: int, resolution: 
     The kernel is computed over a square grid of size kernel_size x kernel_size (assumed odd).
     Sigma is expressed in mm; resolution is mm per grid cell.
     """
-    print(sigma, kernel_size, resolution)
     half_size = kernel_size // 2
     x = np.linspace(-half_size * resolution, half_size * resolution, kernel_size)
     y = np.linspace(-half_size * resolution, half_size * resolution, kernel_size)
