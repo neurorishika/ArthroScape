@@ -18,6 +18,8 @@ class MultiAnimalSimulator:
         self.odor_release_strategy = odor_release_strategy
         self.rng = __import__("numpy").random.default_rng(seed)
         self.num_animals = config.number_of_animals
+        # For each agent, create a new instance of the odor perception:
+        self.odor_perceptions = [config.odor_perception_factory() for _ in range(self.num_animals)]
 
     def simulate(self) -> Dict[str, Any]:
         cfg = self.config
@@ -31,6 +33,12 @@ class MultiAnimalSimulator:
         ys = [[0.0] * N for _ in range(num)]
         odor_left_arr = [[0.0] * N for _ in range(num)]
         odor_right_arr = [[0.0] * N for _ in range(num)]
+        perc_odor_left_arr = [[0.0] * N for _ in range(num)]
+        perc_odor_right_arr = [[0.0] * N for _ in range(num)]
+
+        # Reset each agent's perception at start
+        for a in range(self.num_animals):
+            self.odor_perceptions[a].reset()
 
         # Initialize each animal with a random heading and a random initial position.
         for a in range(num):
@@ -70,8 +78,14 @@ class MultiAnimalSimulator:
                 odor_left_arr[a][i] = odor_left
                 odor_right_arr[a][i] = odor_right
 
+                # Update the perceived odor values for this agent.
+                dt = 1.0 / cfg.fps  # time step per frame
+                perc_odor_left, perc_odor_right = self.odor_perceptions[a].perceive_odor(odor_left, odor_right, dt)
+                perc_odor_left_arr[a][i] = perc_odor_left
+                perc_odor_right_arr[a][i] = perc_odor_right
+
                 headings[a][i] = self.behavior.update_heading(
-                    headings[a][i-1], odor_left, odor_right, False, cfg, self.rng
+                    headings[a][i-1], perc_odor_left, perc_odor_right, False, cfg, self.rng
                 )
                 if states[a][i] == 0:
                     xs[a][i] = xs[a][i-1]
@@ -104,7 +118,9 @@ class MultiAnimalSimulator:
                     "heading": headings[a],
                     "state": states[a],
                     "odor_left": odor_left_arr[a],
-                    "odor_right": odor_right_arr[a]
+                    "odor_right": odor_right_arr[a],
+                    "perc_odor_left": perc_odor_left_arr[a],
+                    "perc_odor_right": perc_odor_right_arr[a]
                 } for a in range(num)
             ],
             "final_odor_grid": self.arena.odor_grid

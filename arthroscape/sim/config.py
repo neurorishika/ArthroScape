@@ -3,11 +3,12 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Tuple, Sequence, Callable
 from .directional_persistence import DirectionalPersistenceStrategy
+from .odor_perception import AgentOdorPerception, NoAdaptationPerception
 
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 1         # Total simulation time in seconds
+    T: float = 60 * 60         # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -32,6 +33,11 @@ class SimulationConfig:
     # Antenna offsets in the fly's body frame (dx, dy) in mm.
     antenna_left_offset: Tuple[float, float] = (1.5, 0.5)   # shifted forward & left
     antenna_right_offset: Tuple[float, float] = (1.5, -0.5) # shifted forward & right
+
+    # Odor perception parameters
+    odor_perception_factory: Callable[[], AgentOdorPerception] = field(
+        default_factory=lambda: NoAdaptationPerception
+    )
 
     # Odor deposition kernel parameters
     deposit_sigma: float = 1.0         # Standard deviation (in mm) for the Gaussian deposit

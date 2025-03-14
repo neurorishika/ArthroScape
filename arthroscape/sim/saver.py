@@ -33,6 +33,8 @@ def save_simulation_results_hdf5(results: List[Dict], filename: str) -> None:
                 animal_group.create_dataset('state', data=np.array(traj.get('state', [])))
                 animal_group.create_dataset('odor_left', data=np.array(traj.get('odor_left', [])))
                 animal_group.create_dataset('odor_right', data=np.array(traj.get('odor_right', [])))
+                animal_group.create_dataset('perceived_odor_left', data=np.array(traj.get('perceived_odor_left', [])))
+                animal_group.create_dataset('perceived_odor_right', data=np.array(traj.get('perceived_odor_right', [])))
             
             # Optionally, save odor grid history if it exists.
             if 'odor_grid_history' in result:
