@@ -287,7 +287,7 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5,
+    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
                                         wraparound: bool = False, output_file: str = "animation.mp4",
                                         display: bool = False) -> None:
         """
@@ -296,7 +296,7 @@ class VisualizationPipeline:
         
         Parameters:
             sim_index (int): Index of the simulation replicate.
-            interval (int): Delay between frames in milliseconds (FPS = 1000/interval).
+            fps (int): Frames per second for the output video.
             frame_skip (int): Process every Nth frame.
             wraparound (bool): If True, wrap and segment trajectories to avoid spurious connecting lines.
             output_file (str): Path to the output video file.
@@ -338,7 +338,7 @@ class VisualizationPipeline:
 
         # Prepare the VideoWriter.
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = 1000 // interval  # approximate FPS
+        fps = int(fps)
         writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
 
         total_frames = len(result["trajectories"][0]["x"])
@@ -406,8 +406,9 @@ class VisualizationPipeline:
                 odor_left = traj["odor_left"][cur_idx]
                 odor_right = traj["odor_right"][cur_idx]
                 # Scale marker radius by odor intensity.
-                radius_left = max(3, int(5 * odor_left))
-                radius_right = max(3, int(5 * odor_right))
+                scale = 10
+                radius_left = max(3, int(scale * np.log1p(odor_left)))
+                radius_right = max(3, int(scale * np.log1p(odor_right)))
                 cv2.circle(img, left_center, radius_left, color=(255, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
                 cv2.circle(img, right_center, radius_right, color=(0, 0, 255), thickness=-1, lineType=cv2.LINE_AA)
 

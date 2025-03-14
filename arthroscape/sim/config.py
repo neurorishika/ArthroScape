@@ -7,7 +7,7 @@ from .directional_persistence import DirectionalPersistenceStrategy
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 5          # Total simulation time in seconds
+    T: float = 60 * 1         # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters

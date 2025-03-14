@@ -18,8 +18,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def get_default_save_path(args) -> str:
     """Generate a default HDF5 file path under data/simulation/MM-DD-YY/{time}_{description}/results.h5"""
     date_str = datetime.now().strftime("%m-%d-%Y")
-    time_str = datetime.now().strftime("%H-%M-%S")
-    description = f"{time_str}_arena-{args.arena}_rep-{args.replicates}_animals-{args.animals}_odor-{args.odor_release}"
+    time_str = datetime.now().strftime("%H_%M_%S")
+    description = f"{time_str}_{args.arena}_arena_{args.animals}x{args.replicates}_{args.odor_release}"
     dir_path = os.path.join("data", "simulation", date_str, description)
     os.makedirs(dir_path, exist_ok=True)
     return os.path.join(dir_path, "results.h5")
@@ -113,7 +113,7 @@ def main():
             viz.plot_odor_time_series(sim_index=rep_index, show=False, save_path=odor_ts_path)
             # Save animation.
             animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
-            viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, interval=1, frame_skip=30,
+            viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, fps=config.fps, frame_skip=8,
                                             output_file=animation_path,
                                             wraparound=True if args.arena == "pbc" else False)
             logger.info(f"Saved plots and animation for replicate {rep_index} in {rep_plots_dir}")
