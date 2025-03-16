@@ -38,7 +38,7 @@ def get_initial_heading_sampler() -> Callable[[], float]:
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 10         # Total simulation time in seconds
+    T: float = 60 * 60         # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters

@@ -1,4 +1,4 @@
-# tests/test_simulation.py
+# tests/test_exhaustive_plus.py
 import os
 import pickle
 import tempfile
@@ -10,19 +10,24 @@ import pytest
 import math
 from math import pi, isclose
 
-# Import modules from the package
+# Import modules from the package.
+# Note: wrap_coordinates is now in visualization.
 from arthroscape.sim.config import (
     SimulationConfig,
     get_walking_speed_sampler,
     get_turn_angle_sampler,
     get_initial_position_sampler,
-    get_initial_heading_sampler
+    get_initial_heading_sampler,
 )
 from arthroscape.sim.arena import (
     GridArena,
     create_circular_arena_with_annular_trail,
-    PeriodicSquareArena,
-    wrap_coordinates
+    PeriodicSquareArena
+)
+from arthroscape.sim.visualization import (
+    wrap_coordinates,
+    segment_trajectory_with_indices,
+    VisualizationPipeline
 )
 from arthroscape.sim.directional_persistence import (
     FixedBlendPersistence,
@@ -44,10 +49,6 @@ from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.simulator import MultiAnimalSimulator
 from arthroscape.sim.runner import run_simulations
 from arthroscape.sim.saver import save_simulation_results_hdf5
-from arthroscape.sim.visualization import (
-    VisualizationPipeline,
-    segment_trajectory_with_indices
-)
 
 ###########################################
 # CONFIGURATION TESTS
@@ -68,7 +69,6 @@ def test_config_with_extreme_sigma():
     """Test that changing deposit_sigma changes the deposit_kernel_size accordingly."""
     config = SimulationConfig(deposit_sigma=0.2)
     config.__post_init__()
-    # Expect a smaller kernel than the default.
     default_config = SimulationConfig()
     default_config.__post_init__()
     assert config.deposit_kernel_size < default_config.deposit_kernel_size
@@ -113,7 +113,6 @@ def test_arena_deposit_and_interpolation():
     cy = (config.grid_y_min + config.grid_y_max) / 2
     arena.deposit_odor_kernel(cx, cy, kernel)
     np.testing.assert_allclose(arena.odor_grid.sum(), 1, rtol=1e-5)
-    # Interpolation should give nonzero value.
     odor_val = arena.get_odor(cx, cy)
     assert odor_val > 0
 
@@ -157,18 +156,14 @@ def test_fixed_blend_persistence():
 
 def test_odor_difference_weighted_persistence():
     dp = OdorDifferenceWeightedPersistence(alpha_min=0.3, alpha_max=0.7)
-    # When both sensors are equal, persistence should be high.
     h_equal = dp.adjust_heading(pi/4, pi/2, 5, 5, None, np.random.default_rng())
-    # When there's a strong difference, persistence should be lower.
     h_diff = dp.adjust_heading(pi/4, pi/2, 10, 1, None, np.random.default_rng())
-    # We expect h_diff to be closer to the computed heading (pi/2).
     assert abs(h_diff - (pi/2)) < abs(h_equal - (pi/2))
 
 def test_avg_odor_weighted_persistence():
     dp = AvgOdorWeightedPersistence(alpha_min=0.3, alpha_max=0.7)
     h_low = dp.adjust_heading(pi/4, pi/2, 0.1, 0.1, None, np.random.default_rng())
     h_high = dp.adjust_heading(pi/4, pi/2, 10, 10, None, np.random.default_rng())
-    # With high average odor, expect the heading to lean more toward prev_heading.
     assert h_high < h_low or isclose(h_high, h_low)
 
 ###########################################
@@ -183,7 +178,6 @@ def test_no_adaptation_perception():
 def test_low_pass_perception():
     op = LowPassPerception(alpha=0.5)
     op.reset()
-    # First call; output should be halfway toward input.
     left, right = op.perceive_odor(10, 20, 1)
     np.testing.assert_allclose(left, 5, rtol=1e-2)
     np.testing.assert_allclose(right, 10, rtol=1e-2)
@@ -199,9 +193,8 @@ def test_derivative_perception():
 def test_adaptation_perception():
     op = AdaptationPerception(tau_adapt=0.5, tau_recovery=2.0, beta=1.0)
     op.reset()
-    left1, right1 = op.perceive_odor(10, 10, 1)
-    left2, right2 = op.perceive_odor(10, 10, 1)
-    # Over successive steps with the same high odor, perceived values should decrease.
+    left1, right1 = op.perceive_odor(5, 5, 1/60)
+    left2, right2 = op.perceive_odor(5, 5, 1/60)
     assert left2 < left1 and right2 < right1
 
 ###########################################
@@ -215,10 +208,8 @@ def test_constant_odor_release_kernel():
     instructions = odor_release.release_odor(1, (0, 0), 0, config, np.random.default_rng())
     assert len(instructions) >= 1
     kernel = instructions[0].generate_kernel(config)
-    # Kernel should have the shape determined by deposit_kernel_size.
     expected_shape = (config.deposit_kernel_size, config.deposit_kernel_size)
     assert kernel.shape == expected_shape
-    # The sum of the kernel should equal the deposit amount (10).
     np.testing.assert_allclose(kernel.sum(), 10, rtol=1e-5)
 
 def test_default_odor_release():
@@ -303,7 +294,6 @@ def test_hdf5_saver(tmp_path):
 def test_wrap_coordinates_function():
     arr = np.array([90, 95, 105, 110])
     wrapped = wrap_coordinates(arr, 100, 120)
-    # Values below 100 should wrap close to the max.
     assert wrapped[0] >= 100 and wrapped[0] < 120
     np.testing.assert_allclose(wrapped[2:], arr[2:])
 
@@ -339,7 +329,6 @@ def test_visualization_plots(tmp_path):
     viz.plot_trajectories_with_odor(sim_index=0, show=False, save_path=str(out_dir / "traj.png"), wraparound=False)
     viz.plot_final_odor_grid(sim_index=0, show=False, save_path=str(out_dir / "odor.png"))
     viz.plot_odor_time_series(sim_index=0, show=False, save_path=str(out_dir / "odor_ts.png"))
-    # Check that the files were created.
     assert (out_dir / "traj.png").exists()
     assert (out_dir / "odor.png").exists()
     assert (out_dir / "odor_ts.png").exists()

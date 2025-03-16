@@ -78,6 +78,26 @@ class GridArena(Arena):
                 Q21 * fi * (1-fj) +
                 Q12 * (1-fi) * fj +
                 Q22 * fi * fj)
+    
+    def get_odor_vectorized(self, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        """
+        Vectorized version of get_odor using bilinear interpolation.
+        xs and ys must be NumPy arrays of the same shape.
+        """
+        gx = (xs - self.x_min) / self.resolution
+        gy = (ys - self.y_min) / self.resolution
+        j = np.floor(gx).astype(int)
+        i = np.floor(gy).astype(int)
+        fi = gx - j
+        fj = gy - i
+        # Clip indices to valid range for interpolation
+        i = np.clip(i, 0, self.ny - 2)
+        j = np.clip(j, 0, self.nx - 2)
+        Q11 = self.odor_grid[i, j]
+        Q21 = self.odor_grid[i, j+1]
+        Q12 = self.odor_grid[i+1, j]
+        Q22 = self.odor_grid[i+1, j+1]
+        return Q11 * (1 - fi) * (1 - fj) + Q21 * fi * (1 - fj) + Q12 * (1 - fi) * fj + Q22 * fi * fj
 
     def is_free(self, x: float, y: float) -> bool:
         if x < self.x_min or x > self.x_max or y < self.y_min or y > self.y_max:
@@ -86,6 +106,19 @@ class GridArena(Arena):
         i = np.clip(i, 0, self.ny - 1)
         j = np.clip(j, 0, self.nx - 1)
         return not self.wall_mask[i, j]
+    
+    def is_free_vectorized(self, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        """
+        Vectorized version of is_free.
+        Returns a boolean array of the same shape as xs and ys.
+        """
+        gx = (xs - self.x_min) / self.resolution
+        gy = (ys - self.y_min) / self.resolution
+        j = np.floor(gx).astype(int)
+        i = np.floor(gy).astype(int)
+        i = np.clip(i, 0, self.ny - 1)
+        j = np.clip(j, 0, self.nx - 1)
+        return ~self.wall_mask[i, j]
 
     def update_odor(self, x: float, y: float, odor: float) -> None:
         if x < self.x_min or x > self.x_max or y < self.y_min or y > self.y_max:

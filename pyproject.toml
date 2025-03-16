@@ -26,6 +26,10 @@ numba = "^0.61.0"
 pytest = "^8.3.5"
 h5py = "^3.13.0"
 opencv-python = "^4.11.0.86"
+line-profiler = "^4.2.0"
+
+[tool.poetry.group.dev.dependencies]
+snakeviz = "^2.2.2"
 
 [build-system]
 requires = ["poetry-core"]
