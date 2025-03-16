@@ -145,125 +145,142 @@ class MultiAnimalSimulator:
 
     def simulate_vectorized(self) -> Dict[str, Any]:
         """
-        A more vectorized version of the simulation loop.
-        Many of the coordinate transformations and odor sampling are done in batch.
+        A vectorized simulation version that uses vectorized world-to-grid conversion,
+        odor deposition, sensor reading, and position update. Behavioral updates (state and heading)
+        are still applied per animal.
         """
         cfg = self.config
         N = cfg.total_frames
         num = self.num_animals
 
-        # Preallocate arrays using NumPy
+        # Pre-allocate arrays for simulation outputs
         states = np.zeros((num, N), dtype=int)
-        headings = np.zeros((num, N), dtype=float)
-        xs = np.zeros((num, N), dtype=float)
-        ys = np.zeros((num, N), dtype=float)
-        odor_left_arr = np.zeros((num, N), dtype=float)
-        odor_right_arr = np.zeros((num, N), dtype=float)
-        perc_left_arr = np.zeros((num, N), dtype=float)
-        perc_right_arr = np.zeros((num, N), dtype=float)
+        headings = np.zeros((num, N))
+        xs = np.zeros((num, N))
+        ys = np.zeros((num, N))
+        odor_left_arr = np.zeros((num, N))
+        odor_right_arr = np.zeros((num, N))
+        perc_odor_left_arr = np.zeros((num, N))
+        perc_odor_right_arr = np.zeros((num, N))
 
-        # Reset each agent's perception
-        for a in range(num):
-            self.odor_perceptions[a].reset()
-
-        # Initialize each agent
+        # Initialize positions and headings (still looping over animals for initial values)
         for a in range(num):
             headings[a, 0] = cfg.initial_heading_sampler()
             xs[a, 0], ys[a, 0] = cfg.initial_position_sampler()
 
-        progress_interval = max(1, N // 100)
+        # Reset odor perceptions for each agent
+        for a in range(num):
+            self.odor_perceptions[a].reset()
 
+        # Main simulation loop (over frames)
         for i in range(1, N):
-            # Update states (vectorizable over agents)
+            # --- State update (scalar per animal) ---
             for a in range(num):
                 states[a, i] = self.behavior.update_state(states[a, i-1], cfg, self.rng)
 
-            # Gather previous positions and headings (vectorized)
-            x_prev = xs[:, i-1]
-            y_prev = ys[:, i-1]
-            heading_prev = headings[:, i-1]
-
-            # ----- Odor Release (still per-agent because deposits vary) -----
+            # --- Odor deposition (vectorized if possible) ---
+            deposit_xs = []
+            deposit_ys = []
+            kernels = []
             for a in range(num):
                 deposits = self.odor_release_strategy.release_odor(
-                    states[a, i-1], (x_prev[a], y_prev[a]), heading_prev[a], cfg, self.rng
+                    states[a, i-1], (xs[a, i-1], ys[a, i-1]), headings[a, i-1], cfg, self.rng
                 )
                 for deposit in deposits:
                     dx, dy = deposit.offset
-                    cos_h = math.cos(heading_prev[a])
-                    sin_h = math.sin(heading_prev[a])
-                    global_dx = dx * cos_h - dy * sin_h
-                    global_dy = dx * sin_h + dy * cos_h
-                    deposit_x = x_prev[a] + global_dx
-                    deposit_y = y_prev[a] + global_dy
-                    kernel = deposit.generate_kernel(cfg)
-                    self.arena.deposit_odor_kernel(deposit_x, deposit_y, kernel)
+                    # Compute global deposit offset for this animal (scalar)
+                    global_dx = dx * math.cos(headings[a, i-1]) - dy * math.sin(headings[a, i-1])
+                    global_dy = dx * math.sin(headings[a, i-1]) + dy * math.cos(headings[a, i-1])
+                    deposit_xs.append(xs[a, i-1] + global_dx)
+                    deposit_ys.append(ys[a, i-1] + global_dy)
+                    kernels.append(deposit.generate_kernel(cfg))
+            # If any deposits occurred, try a vectorized deposit if the arena supports it.
+            if deposit_xs:
+                deposit_xs_arr = np.array(deposit_xs)
+                deposit_ys_arr = np.array(deposit_ys)
+                # Check if all kernels have the same shape.
+                if all(k.shape == kernels[0].shape for k in kernels) and hasattr(self.arena, "deposit_odor_kernels_vectorized"):
+                    self.arena.deposit_odor_kernels_vectorized(deposit_xs_arr, deposit_ys_arr, kernels[0])
+                else:
+                    # Fall back to scalar deposits.
+                    for dx, dy, kernel in zip(deposit_xs, deposit_ys, kernels):
+                        self.arena.deposit_odor_kernel(dx, dy, kernel)
 
-            # ----- Vectorized computation for antenna positions -----
-            cos_h = np.cos(heading_prev)
-            sin_h = np.sin(heading_prev)
-            left_dx = cfg.antenna_left_offset[0] * cos_h - cfg.antenna_left_offset[1] * sin_h
-            left_dy = cfg.antenna_left_offset[0] * sin_h + cfg.antenna_left_offset[1] * cos_h
-            right_dx = cfg.antenna_right_offset[0] * cos_h - cfg.antenna_right_offset[1] * sin_h
-            right_dy = cfg.antenna_right_offset[0] * sin_h + cfg.antenna_right_offset[1] * cos_h
-            left_x = x_prev + left_dx
-            left_y = y_prev + left_dy
-            right_x = x_prev + right_dx
-            right_y = y_prev + right_dy
+            # --- Compute sensor positions vectorized ---
+            # Calculate rotated offsets using vectorized trigonometry.
+            current_headings = headings[:, i-1]  # shape (num,)
+            cos_vals = np.cos(current_headings)
+            sin_vals = np.sin(current_headings)
+            left_offset = np.array(cfg.antenna_left_offset)  # shape (2,)
+            right_offset = np.array(cfg.antenna_right_offset)  # shape (2,)
+            left_dx = left_offset[0] * cos_vals - left_offset[1] * sin_vals
+            left_dy = left_offset[0] * sin_vals + left_offset[1] * cos_vals
+            right_dx = right_offset[0] * cos_vals - right_offset[1] * sin_vals
+            right_dy = right_offset[0] * sin_vals + right_offset[1] * cos_vals
+            left_sensor_x = xs[:, i-1] + left_dx
+            left_sensor_y = ys[:, i-1] + left_dy
+            right_sensor_x = xs[:, i-1] + right_dx
+            right_sensor_y = ys[:, i-1] + right_dy
 
-            # ----- Vectorized odor sampling using new arena method -----
-            odor_left_arr[:, i] = self.arena.get_odor_vectorized(left_x, left_y)
-            odor_right_arr[:, i] = self.arena.get_odor_vectorized(right_x, right_y)
+            # --- Get odor sensor readings vectorized ---
+            # We assume your arena provides a vectorized get_odor_vectorized method.
+            if hasattr(self.arena, "get_odor_vectorized"):
+                odor_left_vals = self.arena.get_odor_vectorized(left_sensor_x, left_sensor_y)
+                odor_right_vals = self.arena.get_odor_vectorized(right_sensor_x, right_sensor_y)
+            else:
+                odor_left_vals = np.array([self.arena.get_odor(x, y) for x, y in zip(left_sensor_x, left_sensor_y)])
+                odor_right_vals = np.array([self.arena.get_odor(x, y) for x, y in zip(right_sensor_x, right_sensor_y)])
+            odor_left_arr[:, i] = odor_left_vals
+            odor_right_arr[:, i] = odor_right_vals
 
-            # ----- Perception (per-agent loop) -----
+            # --- Update perceived odor (still per-animal) ---
             dt = 1.0 / cfg.fps
             for a in range(num):
-                pl, pr = self.odor_perceptions[a].perceive_odor(odor_left_arr[a, i], odor_right_arr[a, i], dt)
-                perc_left_arr[a, i] = pl
-                perc_right_arr[a, i] = pr
+                perc_left, perc_right = self.odor_perceptions[a].perceive_odor(odor_left_arr[a, i], odor_right_arr[a, i], dt)
+                perc_odor_left_arr[a, i] = perc_left
+                perc_odor_right_arr[a, i] = perc_right
 
-            # ----- Heading update (per-agent loop) -----
+            # --- Update headings (per-animal) ---
             for a in range(num):
                 headings[a, i] = self.behavior.update_heading(
-                    heading_prev[a], perc_left_arr[a, i], perc_right_arr[a, i], False, cfg, self.rng
+                    headings[a, i-1], perc_odor_left_arr[a, i], perc_odor_right_arr[a, i], False, cfg, self.rng
                 )
 
-            # ----- Vectorized position update using vectorized is_free -----
-            # Compute potential new positions
-            speed = np.array([cfg.walking_speed_sampler() for _ in range(num)])
-            dist = speed / cfg.fps
-            new_x = xs[:, i-1] + np.cos(headings[:, i]) * dist
-            new_y = ys[:, i-1] + np.sin(headings[:, i]) * dist
+            # --- Compute new positions vectorized ---
+            # Compute walking distances for each animal.
+            current_speeds = np.array([cfg.walking_speed_sampler() for _ in range(num)])
+            walking_distance = current_speeds / cfg.fps
+            proposed_x = xs[:, i-1] + np.cos(headings[:, i]) * walking_distance
+            proposed_y = ys[:, i-1] + np.sin(headings[:, i]) * walking_distance
 
-            # Use the vectorized is_free method to determine which agents can move
-            free = self.arena.is_free_vectorized(new_x, new_y)
-            xs[:, i] = np.where(free, new_x, xs[:, i-1])
-            ys[:, i] = np.where(free, new_y, ys[:, i-1])
+            # Use vectorized free-space check if available.
+            if hasattr(self.arena, "is_free_vectorized"):
+                free = self.arena.is_free_vectorized(proposed_x, proposed_y)
+            else:
+                free = np.array([self.arena.is_free(x, y) for x, y in zip(proposed_x, proposed_y)])
+            xs[:, i] = np.where(free, proposed_x, xs[:, i-1])
+            ys[:, i] = np.where(free, proposed_y, ys[:, i-1])
 
-            # ----- Diffusion / Decay (vectorized in arena) -----
+            # --- Update the odor field ---
             if cfg.diffusion_coefficient > 0 or cfg.odor_decay_rate > 0:
                 self.arena.update_odor_field(dt=dt)
 
-            if i % progress_interval == 0:
-                logger.info(f"[Vectorized] Replicate progress: frame {i}/{N} ({i / N:.0%} done)")
+            if i % max(1, N // 100) == 0:
+                logger.info(f"Vectorized simulation progress: frame {i}/{N} ({i / N:.0%} done)")
 
-        # Convert results to lists if needed
-        def to_list(arr):
-            return arr.tolist()
-
+        # Pack the result into a dictionary.
         result = {
             "trajectories": [
                 {
-                    "x": to_list(xs[a]),
-                    "y": to_list(ys[a]),
-                    "heading": to_list(headings[a]),
-                    "state": to_list(states[a]),
-                    "odor_left": to_list(odor_left_arr[a]),
-                    "odor_right": to_list(odor_right_arr[a]),
-                    "perc_odor_left": to_list(perc_left_arr[a]),
-                    "perc_odor_right": to_list(perc_right_arr[a])
-                }
-                for a in range(num)
+                    "x": xs[a, :].tolist(),
+                    "y": ys[a, :].tolist(),
+                    "heading": headings[a, :].tolist(),
+                    "state": states[a, :].tolist(),
+                    "odor_left": odor_left_arr[a, :].tolist(),
+                    "odor_right": odor_right_arr[a, :].tolist(),
+                    "perc_odor_left": perc_odor_left_arr[a, :].tolist(),
+                    "perc_odor_right": perc_odor_right_arr[a, :].tolist()
+                } for a in range(num)
             ],
             "final_odor_grid": self.arena.odor_grid
         }

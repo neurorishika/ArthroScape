@@ -38,7 +38,7 @@ def get_initial_heading_sampler() -> Callable[[], float]:
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 60         # Total simulation time in seconds
+    T: float = 60 * 3         # Total simulation time in seconds
     fps: float = 60              # Frames per second
 
     # Motion parameters
@@ -142,7 +142,6 @@ class SimulationConfig:
 
         # Compute kernel size from sigma and deposit_kernel_factor (round up to an odd integer)
         size = int(2 * np.ceil(self.deposit_kernel_factor * self.deposit_sigma / self.grid_resolution)) + 1
-        print("size", size)
         self.deposit_kernel_size = size
 
         # Compute odor decay rate per frame from the time constant

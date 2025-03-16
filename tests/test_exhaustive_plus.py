@@ -249,6 +249,20 @@ def test_simulator_output_shape():
     assert len(traj["x"]) == config.total_frames
     assert result["final_odor_grid"].shape == (arena.ny, arena.nx)
 
+def test_simulator_vectorized_output_shape():
+    config = SimulationConfig(T=2, fps=1, number_of_animals=1)
+    config.__post_init__()
+    arena = GridArena(config.grid_x_min, config.grid_x_max,
+                      config.grid_y_min, config.grid_y_max,
+                      config.grid_resolution, config=config)
+    behavior = DefaultBehavior()
+    odor_release = DefaultOdorRelease()
+    simulator = MultiAnimalSimulator(config, behavior, arena, odor_release, seed=42)
+    result = simulator.simulate_vectorized()
+    traj = result["trajectories"][0]
+    assert len(traj["x"]) == config.total_frames
+    assert result["final_odor_grid"].shape == (arena.ny, arena.nx)
+
 def test_runner_parallel_serial():
     config = SimulationConfig(T=1, fps=1, number_of_animals=1)
     config.__post_init__()
