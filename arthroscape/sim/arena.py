@@ -507,10 +507,13 @@ class PeriodicSquareArena(GridArena):
         ksize = kernel.shape[0]
         half_size = ksize // 2
         i_center, j_center, _, _ = self._world_to_grid(x, y)
-        deposit_array = np.zeros_like(self.odor_grid)
-        deposit_array[:ksize, :ksize] = kernel
-        deposit_array = np.roll(deposit_array, shift=(i_center - half_size, j_center - half_size), axis=(0, 1))
-        self.odor_grid += deposit_array
+        ny, nx = self.odor_grid.shape
+        for di in range(ksize):
+            for dj in range(ksize):
+                # Compute target indices with periodic wrapping
+                i = (i_center - half_size + di) % ny
+                j = (j_center - half_size + dj) % nx
+                self.odor_grid[i, j] += kernel[di, dj]
 
     def deposit_odor_kernels_vectorized(self, xs: np.ndarray, ys: np.ndarray, kernel: np.ndarray) -> None:
         """
@@ -675,28 +678,26 @@ def update_odor_periodic_vectorized_numba(odor_grid, xs, ys, odors, x_min, y_min
         odor_grid[i[idx], j[idx]] += odors[idx]
     return odor_grid
 
-def deposit_odor_kernel_periodic_numba(odor_grid, i_center, j_center, kernel, ny, nx):
+@njit
+def deposit_odor_kernel_periodic_direct(odor_grid, i_center, j_center, kernel):
     """
-    Numba-accelerated deposition of a single kernel at a grid index using np.roll.
-
-    :param odor_grid: 2D array of the odor grid.
-    :param i_center: Center row index for deposit.
-    :param j_center: Center column index for deposit.
-    :param kernel: 2D array representing the kernel.
-    :param ny: Number of rows in odor_grid.
-    :param nx: Number of columns in odor_grid.
+    Numba-accelerated deposition of a single kernel at a grid index with periodic wrapping.
     """
     # type cast to int
     i_center = int(i_center)
     j_center = int(j_center)
+    ny, nx = odor_grid.shape
     ksize = kernel.shape[0]
     half_size = ksize // 2
-    deposit_array = np.zeros_like(odor_grid)
-    deposit_array[:ksize, :ksize] = kernel
-    deposit_array = np.roll(deposit_array, (i_center - half_size, j_center - half_size), (0, 1))
-    odor_grid += deposit_array
+    for di in range(ksize):
+        for dj in range(ksize):
+            # Compute target indices with periodic wrapping
+            i = (i_center - half_size + di) % ny
+            j = (j_center - half_size + dj) % nx
+            odor_grid[i, j] += kernel[di, dj]
     return odor_grid
 
+@njit
 def deposit_odor_kernels_periodic_vectorized_numba(odor_grid, i_centers, j_centers, kernel, ny, nx):
     """
     Numba-accelerated vectorized deposition of the same kernel at multiple grid indices.
@@ -709,7 +710,7 @@ def deposit_odor_kernels_periodic_vectorized_numba(odor_grid, i_centers, j_cente
     :param nx: Number of columns in odor_grid.
     """
     for idx in range(i_centers.size):
-        odor_grid = deposit_odor_kernel_periodic_numba(odor_grid, i_centers[idx], j_centers[idx], kernel, ny, nx)
+        odor_grid = deposit_odor_kernel_periodic_direct(odor_grid, i_centers[idx], j_centers[idx], kernel)
     return odor_grid
 
 #####################################################################

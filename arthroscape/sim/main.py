@@ -8,7 +8,7 @@ from arthroscape.sim.config import SimulationConfig
 from arthroscape.sim.arena import create_circular_arena_with_annular_trail, PeriodicSquareArena
 from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.odor_release import DefaultOdorRelease, ConstantOdorRelease
-from arthroscape.sim.runner import run_simulations
+from arthroscape.sim.runner import run_simulations, run_simulations_vectorized
 from arthroscape.sim.visualization import VisualizationPipeline
 from arthroscape.sim.saver import save_simulation_results_hdf5
 
@@ -44,6 +44,7 @@ def main():
     # The --save option expects an HDF5 filename; if not provided, a default path is generated.
     parser.add_argument("--save", type=str, default="", help="Filename to save results as HDF5 (e.g., results.h5)")
     parser.add_argument("--visualize", action="store_true", help="Visualize simulation results and save plots")
+    parser.add_argument("--dont-vectorize", action="store_true", help="Run the simulation in non-vectorized mode")
     args = parser.parse_args()
 
     # Create simulation configuration.
@@ -75,8 +76,12 @@ def main():
         raise ValueError("Unknown odor release strategy selected.")
 
     logger.info("Starting simulation...")
-    simulation_results = run_simulations(config, behavior, arena, odor_release_strategy,
-                                         n_replicates=args.replicates, parallel=args.parallel)
+    if args.dont_vectorize:
+        simulation_results = run_simulations(config, behavior, arena, odor_release_strategy,
+                                             n_replicates=args.replicates, parallel=args.parallel)
+    else:
+        simulation_results = run_simulations_vectorized(config, behavior, arena, odor_release_strategy,
+                                                            n_replicates=args.replicates, parallel=args.parallel)
     logger.info("Simulation complete.")
 
     # Determine the save path for simulation results.
