@@ -167,7 +167,9 @@ class GridArena(Arena):
         :param ys: 1D NumPy array of y coordinates for deposit centers.
         :param kernel: 2D NumPy array representing the kernel (assumed square, odd dimensions).
         """
-        self.odor_grid = deposit_odor_kernels_vectorized_numba(self.odor_grid, xs, ys, kernel, self.ny, self.nx)
+        # get world to grid indices
+        i, j, _, _ = self.world_to_grid_vectorized(xs, ys)
+        self.odor_grid = deposit_odor_kernels_vectorized_numba(self.odor_grid, i, j, kernel, self.ny, self.nx)
     
     def _compute_diffusion_kernel(self, dt: float) -> Tuple[float, np.ndarray]:
         var = self.diffusion_coefficient * dt
@@ -374,10 +376,6 @@ def deposit_odor_kernel_numba(odor_grid, i_center, j_center, kernel, ny, nx):
     ksize = kernel.shape[0]
     half_size = ksize // 2
 
-    # type cast to int
-    i_center = int(i_center)
-    j_center = int(j_center)
-
     # Compute deposition boundaries on the grid.
     i0 = max(i_center - half_size, 0)
     i1 = min(i_center + half_size + 1, ny)
@@ -387,11 +385,11 @@ def deposit_odor_kernel_numba(odor_grid, i_center, j_center, kernel, ny, nx):
     # Compute corresponding kernel indices.
     ki0 = half_size - (i_center - i0)
     kj0 = half_size - (j_center - j0)
+    ki1 = ki0 + (i1 - i0)
+    kj1 = kj0 + (j1 - j0)
 
-    for di in range(i1 - i0):
-        for dj in range(j1 - j0):
-            # Explicitly cast kernel indices to int.
-            odor_grid[i0 + di, j0 + dj] += kernel[int(ki0) + di, int(kj0) + dj]
+    # Deposit the kernel on the grid.
+    odor_grid[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
     return odor_grid
 
 @njit
@@ -526,7 +524,8 @@ class PeriodicSquareArena(GridArena):
         :param ys: 1D NumPy array of y coordinates for deposit centers.
         :param kernel: 2D NumPy array representing the kernel (assumed square, odd dimensions).
         """
-        self.odor_grid = deposit_odor_kernels_periodic_vectorized_numba(self.odor_grid, xs, ys, kernel, self.ny, self.nx)
+        i, j, _, _ = self.world_to_grid_vectorized(xs, ys)
+        self.odor_grid = deposit_odor_kernels_periodic_vectorized_numba(self.odor_grid, i, j, kernel, self.ny, self.nx)
 
     def update_odor_field(self, dt: float = 1.0, method: str = 'box_blur') -> None:
         if self.diffusion_coefficient == 0:
@@ -679,14 +678,10 @@ def update_odor_periodic_vectorized_numba(odor_grid, xs, ys, odors, x_min, y_min
     return odor_grid
 
 @njit
-def deposit_odor_kernel_periodic_direct(odor_grid, i_center, j_center, kernel):
+def deposit_odor_kernel_periodic_direct(odor_grid, i_center, j_center, kernel, ny, nx):
     """
     Numba-accelerated deposition of a single kernel at a grid index with periodic wrapping.
     """
-    # type cast to int
-    i_center = int(i_center)
-    j_center = int(j_center)
-    ny, nx = odor_grid.shape
     ksize = kernel.shape[0]
     half_size = ksize // 2
     for di in range(ksize):
@@ -710,7 +705,7 @@ def deposit_odor_kernels_periodic_vectorized_numba(odor_grid, i_centers, j_cente
     :param nx: Number of columns in odor_grid.
     """
     for idx in range(i_centers.size):
-        odor_grid = deposit_odor_kernel_periodic_direct(odor_grid, i_centers[idx], j_centers[idx], kernel)
+        odor_grid = deposit_odor_kernel_periodic_direct(odor_grid, i_centers[idx], j_centers[idx], kernel, ny, nx)
     return odor_grid
 
 #####################################################################

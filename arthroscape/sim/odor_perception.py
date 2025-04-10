@@ -31,6 +31,25 @@ class NoAdaptationPerception(AgentOdorPerception):
         # Just return the original values
         return (raw_left, raw_right)
 
+class AblatedPerception(AgentOdorPerception):
+    def __init__(self, direction: str = "random") -> None:
+        self.direction = direction
+        if self.direction not in ["left", "right", "random"]:
+            raise ValueError("Direction must be 'left', 'right', or 'random'.")
+        if self.direction == "random":
+            self.direction = np.random.choice(["left", "right"])
+
+    def reset(self) -> None:
+        pass
+
+    def perceive_odor(self, raw_left: float, raw_right: float, dt: float) -> float:
+        # Return zero for the ablated side
+        if self.direction == "left":
+            return (0.0, raw_right)
+        elif self.direction == "right":
+            return (raw_left, 0.0)
+        else:
+            raise ValueError("Invalid direction for ablation.")
 
 class LowPassPerception(AgentOdorPerception):
     def __init__(self, alpha: float = 0.1):
@@ -48,7 +67,6 @@ class LowPassPerception(AgentOdorPerception):
         self.state_left += self.alpha * (raw_left - self.state_left)
         self.state_right += self.alpha * (raw_right - self.state_right)
         return (self.state_left, self.state_right)
-
 
 class DerivativePerception(AgentOdorPerception):
     def __init__(self, alpha: float = 0.1):

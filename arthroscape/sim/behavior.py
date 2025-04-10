@@ -23,12 +23,15 @@ class DefaultBehavior(BehaviorAlgorithm):
     def update_heading(self, prev_heading: float, odor_left: float, odor_right: float,
                        at_wall: bool, config: SimulationConfig, rng: np.random.Generator) -> float:
         turn_direction = 1 if odor_left > odor_right else (-1 if odor_left < odor_right else rng.choice([-1, 1]))
+        # flip based on error rate
+        if rng.random() < config.error_rate_per_frame:
+            turn_direction *= -1
         if at_wall:
             turn_angle = config.turn_angle_sampler()
             new_heading = prev_heading + turn_direction * turn_angle + rng.normal(0, config.rotation_diffusion)
         elif rng.random() < (config.turn_rate_per_frame +
                              abs(odor_left - odor_right) * config.asymmetry_factor_per_frame):
-            turn_angle = config.turn_angle_sampler()
+            turn_angle = config.turn_angle_sampler() * (1 + config.odor_driven_turn_scaler * (odor_left + odor_right)/2)
             new_heading = prev_heading + turn_direction * turn_angle + rng.normal(0, config.rotation_diffusion)
         else:
             new_heading = prev_heading + rng.normal(0, config.rotation_diffusion)

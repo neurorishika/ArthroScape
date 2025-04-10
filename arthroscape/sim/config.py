@@ -3,8 +3,8 @@ import functools
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Tuple, Sequence, Callable
-from .directional_persistence import DirectionalPersistenceStrategy
-from .odor_perception import AgentOdorPerception, NoAdaptationPerception
+from .directional_persistence import DirectionalPersistenceStrategy, FixedBlendPersistence
+from .odor_perception import AgentOdorPerception, AblatedPerception, NoAdaptationPerception
 
 # Define top-level helper functions that are pickleable.
 def _return_walking_speed(walking_speed: float) -> float:
@@ -38,8 +38,8 @@ def get_initial_heading_sampler() -> Callable[[], float]:
 @dataclass
 class SimulationConfig:
     # Simulation parameters
-    T: float = 60 * 3         # Total simulation time in seconds
-    fps: float = 60              # Frames per second
+    T: float = 60 * 15         # Total simulation time in seconds
+    fps: float = 30              # Frames per second
 
     # Motion parameters
     walking_speed: float = 15    # mm/s when walking
@@ -49,7 +49,9 @@ class SimulationConfig:
 
     # Behavioral algorithm parameters (per second)
     turn_rate: float = 1.0       # Hz, base turning rate
-    asymmetry_factor: float = 20 # Increases turn rate when odor asymmetry is high
+    asymmetry_factor: float = 10 # Increases turn rate when odor asymmetry is high
+    error_rate: float = 0.0         # Hz, Probability of turning in the wrong direction
+    odor_driven_turn_scaler: float = 0.0 # Increases the turn angle based on odor asymmetry
     turn_magnitude_range: Tuple[float, float] = (np.deg2rad(8), np.deg2rad(30))  # radians
     # Optional sampler for turn angle (if desired)
     turn_angle_sampler: Callable[[], float] = None
@@ -59,14 +61,13 @@ class SimulationConfig:
     rate_walk_to_stop: float = 0.05   # Hz, from walking to stop
 
     # Odor sensing parameters
-    antennal_distance: float = 1.0    # legacy parameter (in mm)
     # Antenna offsets in the fly's body frame (dx, dy) in mm.
     antenna_left_offset: Tuple[float, float] = (1.5, 0.5)   # shifted forward & left
     antenna_right_offset: Tuple[float, float] = (1.5, -0.5) # shifted forward & right
 
     # Odor perception parameters
     odor_perception_factory: Callable[[], AgentOdorPerception] = field(
-        default_factory=lambda: NoAdaptationPerception
+        default_factory=lambda: NoAdaptationPerception #functools.partial(AblatedPerception, direction="random")
     )
 
     # Odor deposition kernel parameters
@@ -82,7 +83,7 @@ class SimulationConfig:
 
     # Dynamic odor field parameters
     diffusion_coefficient: float = 0.0  # Diffusion coefficient (in mm^2/s)
-    odor_decay_tau: float = np.inf       # Decay time constant in seconds
+    odor_decay_tau: float = 60*2       # Decay time constant in seconds
     odor_decay_rate: float = field(init=False)             # per frame
 
     # Grid arena parameters
@@ -139,6 +140,8 @@ class SimulationConfig:
         self.rate_stop_to_walk_per_frame = self.rate_stop_to_walk / self.fps
         self.rate_walk_to_stop_per_frame = self.rate_walk_to_stop / self.fps
         self.total_frames = int(self.T * self.fps)
+
+        self.error_rate_per_frame = self.error_rate / self.fps
 
         # Compute kernel size from sigma and deposit_kernel_factor (round up to an odd integer)
         size = int(2 * np.ceil(self.deposit_kernel_factor * self.deposit_sigma / self.grid_resolution)) + 1

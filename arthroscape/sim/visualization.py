@@ -9,6 +9,7 @@ from .arena import GridArena
 from matplotlib.collections import LineCollection
 import logging
 import cv2  # OpenCV
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -288,9 +289,9 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
+    def animate_enhanced_trajectory_opencv_old(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
                                         wraparound: bool = False, output_file: str = "animation.mp4",
-                                        display: bool = False) -> None:
+                                        display: bool = False, progress:bool = True) -> None:
         """
         OpenCV-based animation: animate trajectories for all animals with ellipse representations
         (colored to match the trajectory) and odor sensor markers.
@@ -302,6 +303,7 @@ class VisualizationPipeline:
             wraparound (bool): If True, wrap and segment trajectories to avoid spurious connecting lines.
             output_file (str): Path to the output video file.
             display (bool): If True, display the animation in an OpenCV window.
+            progress (bool): If True, display a progress bar.
         """
         result = self.sim_results[sim_index]
         cfg = self.config
@@ -357,7 +359,7 @@ class VisualizationPipeline:
             seconds = t_seconds % 60
             return f"{hours:02d}:{minutes:02d}:{seconds:05.2f}"
 
-        for frame in frames:
+        for frame in tqdm(frames, disable=not progress):
             # Create a blank white image.
             img = np.ones((img_height, img_width, 3), dtype=np.uint8) * 255
 
@@ -424,6 +426,156 @@ class VisualizationPipeline:
                     break
             
             writer.write(img)
+
+        writer.release()
+        if display:
+            cv2.destroyAllWindows()
+        logger.info(f"OpenCV animation saved to {output_file}")
+
+    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
+                                        wraparound: bool = False, output_file: str = "animation.mp4",
+                                        display: bool = False, progress: bool = True) -> None:
+        """
+        OpenCV-based animation that caches cumulative trajectory tracks while avoiding 
+        drawing spurious connecting lines when using periodic (wraparound) boundaries.
+        
+        When wraparound is enabled, the trajectory for each animal is segmented (using 
+        segment_trajectory_with_indices) so that jumps across the boundary are not drawn.
+        
+        Parameters:
+            sim_index (int): Index of the simulation replicate.
+            fps (int): Frames per second for the output video.
+            frame_skip (int): Process every Nth frame.
+            wraparound (bool): If True, use segmentation to avoid drawing across wrap boundaries.
+            output_file (str): Path to the output video file.
+            display (bool): If True, display the animation in an OpenCV window.
+            progress (bool): If True, display a progress bar.
+        """
+
+        # Get simulation results and configuration.
+        result = self.sim_results[sim_index]
+        cfg = self.config
+        x_min, x_max = cfg.grid_x_min, cfg.grid_x_max
+        y_min, y_max = cfg.grid_y_min, cfg.grid_y_max
+
+        # Compute aspect ratio and output image size.
+        aspect_ratio = (x_max - x_min) / (y_max - y_min)
+        img_width, img_height = 1920, int(1920 / aspect_ratio)
+
+        def sim_to_pixel(x, y):
+            """Map simulation coordinates (mm) to pixel coordinates."""
+            col = int((x - x_min) / (x_max - x_min) * img_width)
+            row = img_height - int((y - y_min) / (y_max - y_min) * img_height)
+            return col, row
+
+        # Precompute pixel trajectories and segments for each animal.
+        pixel_trajs = []
+        segments_list = []  # List of lists of (start, end) indices for each animal
+        for traj in result["trajectories"]:
+            xs = np.array(traj["x"])
+            ys = np.array(traj["y"])
+            if wraparound:
+                xs_wrapped = wrap_coordinates(xs, x_min, x_max)
+                ys_wrapped = wrap_coordinates(ys, y_min, y_max)
+            else:
+                xs_wrapped, ys_wrapped = xs, ys
+            pts = [sim_to_pixel(x, y) for x, y in zip(xs_wrapped, ys_wrapped)]
+            pixel_trajs.append(pts)
+            if wraparound:
+                segs = segment_trajectory_with_indices(xs_wrapped, ys_wrapped, x_min, x_max, y_min, y_max)
+            else:
+                segs = [(0, len(pts))]
+            segments_list.append(segs)
+
+        # Cache: create a background image to accumulate trajectory tracks.
+        track_img = np.ones((img_height, img_width, 3), dtype=np.uint8) * 255
+        # For each animal, track the last drawn index per segment.
+        # We store a list (one per animal) of lists (one per segment) with the last drawn index.
+        last_drawn = []
+        for segs in segments_list:
+            last_drawn.append([s[0] for s in segs])  # initialize at each segment's start
+
+        # Get colors for each trajectory.
+        cmap = plt.cm.get_cmap('rainbow', len(result["trajectories"]))
+        colors = [tuple(int(255 * c) for c in cmap(i)[:3][::-1]) for i in range(len(result["trajectories"]))]
+
+        # Set up video writer.
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
+
+        total_frames = len(result["trajectories"][0]["x"])
+        frames = range(0, total_frames, frame_skip)
+
+        # Animation loop.
+        for frame in tqdm(frames, disable=not progress):
+            # Update cached track image: for each animal and each segment, add new line segments.
+            for a, pts in enumerate(pixel_trajs):
+                segs = segments_list[a]
+                for s_idx, (start, end) in enumerate(segs):
+                    # Only update if the current frame is within this segment.
+                    if frame > start:
+                        # Determine segment endpoint to draw.
+                        seg_end = min(end, frame)
+                        # Only draw if new points exist.
+                        if seg_end - last_drawn[a][s_idx] >= 1:
+                            for k in range(last_drawn[a][s_idx], seg_end - 1):
+                                cv2.line(track_img, pts[k], pts[k+1], colors[a], thickness=1, lineType=cv2.LINE_AA)
+                            last_drawn[a][s_idx] = seg_end
+
+            # Start with a copy of the cached track background.
+            frame_img = track_img.copy()
+
+            # Draw current animal markers (ellipse and sensor markers).
+            for traj_idx, traj in enumerate(result["trajectories"]):
+                if frame < 1:
+                    continue
+                cur_idx = frame - 1
+                # For wraparound, use wrapped coordinates.
+                if wraparound:
+                    cur_x = wrap_coordinates(np.array([traj["x"][cur_idx]]), x_min, x_max)[0]
+                    cur_y = wrap_coordinates(np.array([traj["y"][cur_idx]]), y_min, y_max)[0]
+                else:
+                    cur_x = traj["x"][cur_idx]
+                    cur_y = traj["y"][cur_idx]
+                center = sim_to_pixel(cur_x, cur_y)
+                cur_heading = traj["heading"][cur_idx]
+                angle_deg = -math.degrees(cur_heading)
+                cv2.ellipse(frame_img, center, (20, 10), angle_deg, 0, 360, colors[traj_idx], thickness=1, lineType=cv2.LINE_AA)
+                
+                # Compute antenna positions.
+                left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
+                left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
+                right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
+                right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
+                left_x = cur_x + left_dx
+                left_y = cur_y + left_dy
+                right_x = cur_x + right_dx
+                right_y = cur_y + right_dy
+                left_pt = sim_to_pixel(left_x, left_y)
+                right_pt = sim_to_pixel(right_x, right_y)
+                odor_left = traj["odor_left"][cur_idx]
+                odor_right = traj["odor_right"][cur_idx]
+                scale = 10
+                radius_left = max(3, int(scale * np.log1p(odor_left)))
+                radius_right = max(3, int(scale * np.log1p(odor_right)))
+                cv2.circle(frame_img, left_pt, radius_left, (255, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
+                cv2.circle(frame_img, right_pt, radius_right, (0, 0, 255), thickness=-1, lineType=cv2.LINE_AA)
+
+            # Draw time information.
+            t_seconds = frame / cfg.fps
+            hours = int(t_seconds // 3600)
+            minutes = int((t_seconds % 3600) // 60)
+            seconds = t_seconds % 60
+            time_str = f"{hours:02d}:{minutes:02d}:{seconds:05.2f}"
+            cv2.putText(frame_img, f"Time: {time_str}", (10, img_height - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 50), thickness=2, lineType=cv2.LINE_AA)
+
+            if display:
+                cv2.imshow('Simulation Animation', frame_img)
+                if cv2.waitKey(int(1000 / fps)) & 0xFF == ord('q'):
+                    break
+
+            writer.write(frame_img)
 
         writer.release()
         if display:

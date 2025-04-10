@@ -165,3 +165,8 @@ directory.path
 
 # Mac OS
 **/.DS_Store
+
+# ignore all pdf, csv, and h5 files
+**/*.pdf
+**/*.csv
+**/*.h5

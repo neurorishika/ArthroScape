@@ -57,9 +57,9 @@ def main():
     if args.arena == "circular":
         arena = create_circular_arena_with_annular_trail(config,
                                                          arena_radius=75.0,
-                                                         trail_radius=42.5,
+                                                         trail_radius=50.0,
                                                          trail_width=5.0,
-                                                         trail_odor=0.0)
+                                                         trail_odor=1.0)
     elif args.arena == "pbc":
         arena = PeriodicSquareArena(config.grid_x_min, config.grid_x_max,
                                     config.grid_y_min, config.grid_y_max,
@@ -117,10 +117,10 @@ def main():
             odor_ts_path = os.path.join(rep_plots_dir, "odor_time_series.png")
             viz.plot_odor_time_series(sim_index=rep_index, show=False, save_path=odor_ts_path)
             # # Save animation.
-            # animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
-            # viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, fps=config.fps, frame_skip=30,
-            #                                 output_file=animation_path,
-            #                                 wraparound=True if args.arena == "pbc" else False)
+            animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
+            viz.animate_enhanced_trajectory_opencv(sim_index=rep_index, fps=config.fps, frame_skip=30,
+                                            output_file=animation_path,
+                                            wraparound=True if args.arena == "pbc" else False, display=True, progress=True)
             logger.info(f"Saved plots and animation for replicate {rep_index} in {rep_plots_dir}")
 
 if __name__ == "__main__":
