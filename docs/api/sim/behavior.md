@@ -1,0 +1,3 @@
+# Behavior
+
+::: arthroscape.sim.behavior

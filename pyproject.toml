@@ -35,6 +35,9 @@ circle-fit = "^0.2.1"
 
 [tool.poetry.group.dev.dependencies]
 snakeviz = "^2.2.2"
+mkdocs = "^1.6.1"
+mkdocs-material = "^9.7.0"
+mkdocstrings = {extras = ["python"], version = "^1.0.0"}
 
 [build-system]
 requires = ["poetry-core"]

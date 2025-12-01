@@ -1,0 +1,3 @@
+# Configuration
+
+::: arthroscape.sim.config

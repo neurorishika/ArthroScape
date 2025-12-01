@@ -1,4 +1,14 @@
 # arthroscape/sim/visualization.py
+"""
+Visualization module for ArthroScape.
+
+This module provides tools for visualizing simulation results, including:
+- Static plots of trajectories colored by odor intensity.
+- Heatmaps of the final odor field.
+- Time-series plots of odor concentration at antennae.
+- Animations of animal movement and odor sensing using Matplotlib and OpenCV.
+"""
+
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
@@ -13,25 +23,50 @@ from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 
+
 def wrap_coordinates(arr: np.ndarray, min_val: float, max_val: float) -> np.ndarray:
-    """Wrap an array of coordinates into the interval [min_val, max_val)."""
+    """
+    Wrap an array of coordinates into the interval [min_val, max_val).
+
+    Args:
+        arr (np.ndarray): Array of coordinates.
+        min_val (float): Minimum boundary value.
+        max_val (float): Maximum boundary value.
+
+    Returns:
+        np.ndarray: Wrapped coordinates.
+    """
     width = max_val - min_val
     return ((arr - min_val) % width) + min_val
 
-def segment_trajectory_with_indices(x: np.ndarray, y: np.ndarray,
-                                    x_min: float, x_max: float,
-                                    y_min: float, y_max: float,
-                                    threshold: Tuple[float, float] = None) -> List[Tuple[int, int]]:
+
+def segment_trajectory_with_indices(
+    x: np.ndarray,
+    y: np.ndarray,
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+    threshold: Tuple[float, float] = None,
+) -> List[Tuple[int, int]]:
     """
     Segment a trajectory (x, y) into continuous pieces by detecting jumps.
-    
-    Parameters:
-        x, y: 1D arrays of coordinates.
-        x_min, x_max, y_min, y_max: Domain boundaries.
-        threshold: Tuple (tx, ty) thresholds; if None, defaults to half the domain width/height.
-        
+
+    This is useful for plotting trajectories in periodic (wraparound) arenas,
+    preventing lines from being drawn across the entire arena when an animal wraps around.
+
+    Args:
+        x (np.ndarray): 1D array of x-coordinates.
+        y (np.ndarray): 1D array of y-coordinates.
+        x_min (float): Minimum x boundary.
+        x_max (float): Maximum x boundary.
+        y_min (float): Minimum y boundary.
+        y_max (float): Maximum y boundary.
+        threshold (Tuple[float, float], optional): (tx, ty) thresholds for detecting jumps.
+                                                   If None, defaults to half the domain width/height.
+
     Returns:
-        List of (start_idx, end_idx) indices for each continuous segment.
+        List[Tuple[int, int]]: List of (start_idx, end_idx) indices for each continuous segment.
     """
     if threshold is None:
         threshold = ((x_max - x_min) / 2.0, (y_max - y_min) / 2.0)
@@ -40,70 +75,104 @@ def segment_trajectory_with_indices(x: np.ndarray, y: np.ndarray,
     segments = []
     start = 0
     for i in range(1, len(x)):
-        if abs(x[i] - x[i-1]) > thresh_x or abs(y[i] - y[i-1]) > thresh_y:
+        if abs(x[i] - x[i - 1]) > thresh_x or abs(y[i] - y[i - 1]) > thresh_y:
             segments.append((start, i))
             start = i
     segments.append((start, len(x)))
     return segments
 
+
 class VisualizationPipeline:
-    def __init__(self, sim_results: List[Dict[str, Any]], config: SimulationConfig, arena: GridArena):
+    """
+    A pipeline for generating visualizations from simulation results.
+    """
+
+    def __init__(
+        self,
+        sim_results: List[Dict[str, Any]],
+        config: SimulationConfig,
+        arena: GridArena,
+    ):
         """
         Initialize the visualization pipeline.
-        
-        :param sim_results: A list of simulation result dictionaries.
-                            For multi-animal simulations, each result should have a key "trajectories"
-                            containing a list of per-animal dictionaries.
-        :param config: The SimulationConfig instance.
-        :param arena: The GridArena used in the simulation.
+
+        Args:
+            sim_results (List[Dict[str, Any]]): A list of simulation result dictionaries.
+                                                Each result should contain "trajectories" and optionally "final_odor_grid".
+            config (SimulationConfig): The simulation configuration.
+            arena (GridArena): The arena object used in the simulation.
         """
         self.sim_results = sim_results
         self.config = config
         self.arena = arena
 
-    def plot_trajectories_with_odor(self, sim_index: int = 0, show: bool = True, 
-                                    save_path: str = None, wraparound: bool = False) -> None:
+    def plot_trajectories_with_odor(
+        self,
+        sim_index: int = 0,
+        show: bool = True,
+        save_path: str = None,
+        wraparound: bool = False,
+    ) -> None:
         """
         Plot all animals' trajectories colored by average odor intensity.
-        If wraparound is True, the trajectory is segmented to avoid spurious crossing lines.
+
+        Args:
+            sim_index (int): Index of the simulation replicate to plot. Defaults to 0.
+            show (bool): Whether to display the plot. Defaults to True.
+            save_path (str, optional): Path to save the plot image. Defaults to None.
+            wraparound (bool): If True, segments trajectories to handle periodic boundaries. Defaults to False.
         """
         result = self.sim_results[sim_index]
         fig, ax = plt.subplots(figsize=(8, 8))
         colors = plt.cm.tab10(np.linspace(0, 1, len(result["trajectories"])))
-        
+
         for idx, traj in enumerate(result["trajectories"]):
             x = np.array(traj["x"])
             y = np.array(traj["y"])
-            
+
             if wraparound:
-                x_wrapped = wrap_coordinates(x, self.config.grid_x_min, self.config.grid_x_max)
-                y_wrapped = wrap_coordinates(y, self.config.grid_y_min, self.config.grid_y_max)
-                segments_idx = segment_trajectory_with_indices(x_wrapped, y_wrapped,
-                                                               self.config.grid_x_min, self.config.grid_x_max,
-                                                               self.config.grid_y_min, self.config.grid_y_max)
+                x_wrapped = wrap_coordinates(
+                    x, self.config.grid_x_min, self.config.grid_x_max
+                )
+                y_wrapped = wrap_coordinates(
+                    y, self.config.grid_y_min, self.config.grid_y_max
+                )
+                segments_idx = segment_trajectory_with_indices(
+                    x_wrapped,
+                    y_wrapped,
+                    self.config.grid_x_min,
+                    self.config.grid_x_max,
+                    self.config.grid_y_min,
+                    self.config.grid_y_max,
+                )
             else:
                 segments_idx = [(0, len(x))]
                 x_wrapped = x
                 y_wrapped = y
 
-            avg_odor = (np.array(traj["odor_left"]) + np.array(traj["odor_right"])) / 2.0
+            avg_odor = (
+                np.array(traj["odor_left"]) + np.array(traj["odor_right"])
+            ) / 2.0
 
-            for (start, end) in segments_idx:
+            for start, end in segments_idx:
                 if end - start < 2:
                     continue
                 segment = np.column_stack((x_wrapped[start:end], y_wrapped[start:end]))
-                lc = LineCollection([segment], cmap='viridis', 
-                                    norm=plt.Normalize(vmin=avg_odor.min(), vmax=avg_odor.max()))
-                lc.set_array(avg_odor[start:end-1])
+                lc = LineCollection(
+                    [segment],
+                    cmap="viridis",
+                    norm=plt.Normalize(vmin=avg_odor.min(), vmax=avg_odor.max()),
+                )
+                lc.set_array(avg_odor[start : end - 1])
                 lc.set_linewidth(0.5)
                 ax.add_collection(lc)
-            
+
         ax.set_xlim(self.config.grid_x_min, self.config.grid_x_max)
         ax.set_ylim(self.config.grid_y_min, self.config.grid_y_max)
         ax.set_title("Fly Trajectories Colored by Average Odor")
         ax.set_xlabel("x (mm)")
         ax.set_ylabel("y (mm)")
-        ax.set_aspect('equal')
+        ax.set_aspect("equal")
         fig.colorbar(lc, ax=ax, label="Average Odor Intensity")
         if save_path:
             plt.savefig(save_path, dpi=150)
@@ -111,24 +180,45 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def plot_final_odor_grid(self, sim_index: int = 0, downsample_factor: int = 1, show: bool = True,
-                             save_path: str = None) -> None:
-        """Plot the final odor grid as a heatmap."""
+    def plot_final_odor_grid(
+        self,
+        sim_index: int = 0,
+        downsample_factor: int = 1,
+        show: bool = True,
+        save_path: str = None,
+    ) -> None:
+        """
+        Plot the final odor grid as a heatmap.
+
+        Args:
+            sim_index (int): Index of the simulation replicate. Defaults to 0.
+            downsample_factor (int): Factor by which to downsample the grid for plotting. Defaults to 1.
+            show (bool): Whether to display the plot. Defaults to True.
+            save_path (str, optional): Path to save the plot image. Defaults to None.
+        """
         result = self.sim_results[sim_index]
         odor_grid = result["final_odor_grid"]
         if downsample_factor > 1:
             odor_grid = odor_grid[::downsample_factor, ::downsample_factor]
-            extent = [self.config.grid_x_min, self.config.grid_x_max,
-                      self.config.grid_y_min, self.config.grid_y_max]
+            extent = [
+                self.config.grid_x_min,
+                self.config.grid_x_max,
+                self.config.grid_y_min,
+                self.config.grid_y_max,
+            ]
         else:
-            extent = [self.config.grid_x_min, self.config.grid_x_max,
-                      self.config.grid_y_min, self.config.grid_y_max]
+            extent = [
+                self.config.grid_x_min,
+                self.config.grid_x_max,
+                self.config.grid_y_min,
+                self.config.grid_y_max,
+            ]
         fig, ax = plt.subplots(figsize=(8, 8))
-        im = ax.imshow(odor_grid, origin='lower', extent=extent, cmap='viridis')
+        im = ax.imshow(odor_grid, origin="lower", extent=extent, cmap="viridis")
         ax.set_title("Final Odor Grid")
         ax.set_xlabel("x (mm)")
         ax.set_ylabel("y (mm)")
-        ax.set_aspect('equal')
+        ax.set_aspect("equal")
         fig.colorbar(im, ax=ax, label="Odor Intensity")
         if save_path:
             plt.savefig(save_path, dpi=150)
@@ -136,35 +226,60 @@ class VisualizationPipeline:
             plt.show()
         plt.close(fig)
 
-    def plot_odor_time_series(self, sim_index: int = 0, show: bool = True,
-                               save_path: str = None) -> None:
-        """Plot time series of odor intensity at the antennae for all animals."""
+    def plot_odor_time_series(
+        self, sim_index: int = 0, show: bool = True, save_path: str = None
+    ) -> None:
+        """
+        Plot time series of odor intensity at the antennae for all animals.
+
+        Args:
+            sim_index (int): Index of the simulation replicate. Defaults to 0.
+            show (bool): Whether to display the plot. Defaults to True.
+            save_path (str, optional): Path to save the plot image. Defaults to None.
+        """
         result = self.sim_results[sim_index]
         fig, ax = plt.subplots(figsize=(10, 4))
         for idx, traj in enumerate(result["trajectories"]):
             ax.plot(traj["odor_left"], label=f"Animal {idx+1} Left", lw=2)
-            ax.plot(traj["odor_right"], label=f"Animal {idx+1} Right", lw=2, linestyle="--")
+            ax.plot(
+                traj["odor_right"], label=f"Animal {idx+1} Right", lw=2, linestyle="--"
+            )
         ax.set_xlabel("Frame")
         ax.set_ylabel("Odor Intensity")
         ax.set_title("Odor Time Series at Antennae")
-        ax.legend(loc='upper right')
+        ax.legend(loc="upper right")
         if save_path:
             plt.savefig(save_path, dpi=150)
         if show:
             plt.show()
         plt.close(fig)
 
-    def animate_enhanced_trajectory(self, sim_index: int = 0, interval: int = 50, frame_skip: int = 5,
-                                    save_path: str = None, wraparound: bool = False) -> None:
+    def animate_enhanced_trajectory(
+        self,
+        sim_index: int = 0,
+        interval: int = 50,
+        frame_skip: int = 5,
+        save_path: str = None,
+        wraparound: bool = False,
+    ) -> None:
         """
-        Enhanced animation using Matplotlib: animate trajectories for all animals with heading arrows and antenna markers.
-        When wraparound is True, trajectories are pre-segmented to avoid spurious connecting lines.
+        Create an enhanced animation using Matplotlib.
+
+        Animates trajectories for all animals with heading arrows and antenna markers.
+        Handles wraparound boundaries by segmenting trajectories.
+
+        Args:
+            sim_index (int): Index of the simulation replicate. Defaults to 0.
+            interval (int): Delay between frames in milliseconds. Defaults to 50.
+            frame_skip (int): Number of simulation frames to skip per animation frame. Defaults to 5.
+            save_path (str, optional): Path to save the animation (e.g., .mp4 or .gif). Defaults to None.
+            wraparound (bool): Whether to handle periodic boundaries. Defaults to False.
         """
         result = self.sim_results[sim_index]
         cfg = self.config
         num = len(result["trajectories"])
         colors = plt.cm.rainbow(np.linspace(0, 1, num))
-        
+
         # Pre-compute segmentation indices if wraparound is enabled.
         seg_indices = []
         if wraparound:
@@ -173,49 +288,54 @@ class VisualizationPipeline:
                 y = np.array(traj["y"])
                 x_wrapped = wrap_coordinates(x, cfg.grid_x_min, cfg.grid_x_max)
                 y_wrapped = wrap_coordinates(y, cfg.grid_y_min, cfg.grid_y_max)
-                seg_idx = segment_trajectory_with_indices(x_wrapped, y_wrapped,
-                                                          cfg.grid_x_min, cfg.grid_x_max,
-                                                          cfg.grid_y_min, cfg.grid_y_max)
+                seg_idx = segment_trajectory_with_indices(
+                    x_wrapped,
+                    y_wrapped,
+                    cfg.grid_x_min,
+                    cfg.grid_x_max,
+                    cfg.grid_y_min,
+                    cfg.grid_y_max,
+                )
                 seg_indices.append(seg_idx)
         else:
-            seg_indices = [ [(0, len(traj["x"]))] for traj in result["trajectories"] ]
-        
+            seg_indices = [[(0, len(traj["x"]))] for traj in result["trajectories"]]
+
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlim(cfg.grid_x_min, cfg.grid_x_max)
         ax.set_ylim(cfg.grid_y_min, cfg.grid_y_max)
         ax.set_xlabel("x (mm)")
         ax.set_ylabel("y (mm)")
         ax.set_title("Enhanced Multi-Animal Trajectory Animation")
-        ax.set_aspect('equal')
-        
+        ax.set_aspect("equal")
+
         # Create a LineCollection for each animal to hold segments.
         line_collections = []
         for idx in range(num):
             lc = LineCollection([], colors=[colors[idx]], linewidths=0.5)
             line_collections.append(lc)
             ax.add_collection(lc)
-        
+
         # Create heading arrows and antenna scatter objects.
         heading_arrows = [None] * num
         left_scatters = []
         right_scatters = []
         for idx in range(num):
-            ls = ax.scatter([], [], s=[], c=[], cmap='viridis', edgecolors='k')
-            rs = ax.scatter([], [], s=[], c=[], cmap='viridis', edgecolors='k')
+            ls = ax.scatter([], [], s=[], c=[], cmap="viridis", edgecolors="k")
+            rs = ax.scatter([], [], s=[], c=[], cmap="viridis", edgecolors="k")
             left_scatters.append(ls)
             right_scatters.append(rs)
-        
-        time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
-        
+
+        time_text = ax.text(0.02, 0.95, "", transform=ax.transAxes)
+
         total_frames = len(result["trajectories"][0]["x"])
         frames = range(0, total_frames, frame_skip)
-        
+
         def init():
             for lc in line_collections:
                 lc.set_segments([])
             for idx in range(num):
-                left_scatters[idx].set_offsets(np.empty((0,2)))
-                right_scatters[idx].set_offsets(np.empty((0,2)))
+                left_scatters[idx].set_offsets(np.empty((0, 2)))
+                right_scatters[idx].set_offsets(np.empty((0, 2)))
                 left_scatters[idx].set_sizes(np.array([]))
                 right_scatters[idx].set_sizes(np.array([]))
                 left_scatters[idx].set_array(np.array([]))
@@ -228,7 +348,7 @@ class VisualizationPipeline:
                     heading_arrows[idx] = None
             time_text.set_text("")
             return line_collections + left_scatters + right_scatters + [time_text]
-        
+
         def update(frame):
             for idx, traj in enumerate(result["trajectories"]):
                 x = np.array(traj["x"])
@@ -238,13 +358,15 @@ class VisualizationPipeline:
                     y = wrap_coordinates(y, cfg.grid_y_min, cfg.grid_y_max)
                 segs = seg_indices[idx]
                 segments_to_plot = []
-                for (start, end) in segs:
+                for start, end in segs:
                     if frame > start:
                         seg_end = min(end, frame)
                         if seg_end - start > 1:
-                            segments_to_plot.append(np.column_stack((x[start:seg_end], y[start:seg_end])))
+                            segments_to_plot.append(
+                                np.column_stack((x[start:seg_end], y[start:seg_end]))
+                            )
                 line_collections[idx].set_segments(segments_to_plot)
-                
+
                 cur_idx = frame - 1
                 cur_x = x[cur_idx]
                 cur_y = y[cur_idx]
@@ -259,12 +381,28 @@ class VisualizationPipeline:
                 arrow_length = 1.5
                 dx = arrow_length * math.cos(cur_heading)
                 dy = arrow_length * math.sin(cur_heading)
-                heading_arrows[idx] = ax.arrow(cur_x, cur_y, dx, dy, head_width=1, head_length=2,
-                                               fc=colors[idx], ec=colors[idx])
-                left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
-                left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
-                right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
-                right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
+                heading_arrows[idx] = ax.arrow(
+                    cur_x,
+                    cur_y,
+                    dx,
+                    dy,
+                    head_width=1,
+                    head_length=2,
+                    fc=colors[idx],
+                    ec=colors[idx],
+                )
+                left_dx = cfg.antenna_left_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
+                left_dy = cfg.antenna_left_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
+                right_dx = cfg.antenna_right_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
+                right_dy = cfg.antenna_right_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
                 left_x = cur_x + left_dx
                 left_y = cur_y + left_dy
                 right_x = cur_x + right_dx
@@ -279,24 +417,39 @@ class VisualizationPipeline:
                 left_scatters[idx].set_array(np.array([odor_left]))
                 right_scatters[idx].set_array(np.array([odor_right]))
             time_text.set_text(f"Frame: {frame}")
-            return line_collections + left_scatters + right_scatters + [time_text] + heading_arrows
-        
-        ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
-                                      interval=interval, blit=False)
+            return (
+                line_collections
+                + left_scatters
+                + right_scatters
+                + [time_text]
+                + heading_arrows
+            )
+
+        ani = animation.FuncAnimation(
+            fig, update, frames=frames, init_func=init, interval=interval, blit=False
+        )
         if save_path:
-            ani.save(save_path, writer='imagemagick', fps=1000//interval)
+            ani.save(save_path, writer="imagemagick", fps=1000 // interval)
         else:
             plt.show()
         plt.close(fig)
 
-    def animate_enhanced_trajectory_opencv_old(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
-                                        wraparound: bool = False, output_file: str = "animation.mp4",
-                                        display: bool = False, progress:bool = True) -> None:
+    def animate_enhanced_trajectory_opencv_old(
+        self,
+        sim_index: int = 0,
+        fps: int = 60,
+        frame_skip: int = 5,
+        wraparound: bool = False,
+        output_file: str = "animation.mp4",
+        display: bool = False,
+        progress: bool = True,
+    ) -> None:
         """
-        OpenCV-based animation: animate trajectories for all animals with ellipse representations
-        (colored to match the trajectory) and odor sensor markers.
-        
-        Parameters:
+        OpenCV-based animation (legacy version).
+
+        Animates trajectories for all animals with ellipse representations and odor sensor markers.
+
+        Args:
             sim_index (int): Index of the simulation replicate.
             fps (int): Frames per second for the output video.
             frame_skip (int): Process every Nth frame.
@@ -323,8 +476,11 @@ class VisualizationPipeline:
             return col, row
 
         # Generate distinct colors for each trajectory (BGR for OpenCV)
-        cmap = plt.cm.get_cmap('rainbow', len(result["trajectories"]))
-        colors = [tuple(int(255 * c) for c in cmap(i)[:3][::-1]) for i in range(len(result["trajectories"]))]
+        cmap = plt.cm.get_cmap("rainbow", len(result["trajectories"]))
+        colors = [
+            tuple(int(255 * c) for c in cmap(i)[:3][::-1])
+            for i in range(len(result["trajectories"]))
+        ]
 
         # Pre-compute segmentation indices if wraparound is enabled.
         seg_indices = []
@@ -334,13 +490,15 @@ class VisualizationPipeline:
                 y_arr = np.array(traj["y"])
                 x_wrapped = wrap_coordinates(x_arr, x_min, x_max)
                 y_wrapped = wrap_coordinates(y_arr, y_min, y_max)
-                seg_idx = segment_trajectory_with_indices(x_wrapped, y_wrapped, x_min, x_max, y_min, y_max)
+                seg_idx = segment_trajectory_with_indices(
+                    x_wrapped, y_wrapped, x_min, x_max, y_min, y_max
+                )
                 seg_indices.append(seg_idx)
         else:
-            seg_indices = [ [(0, len(traj["x"]))] for traj in result["trajectories"] ]
+            seg_indices = [[(0, len(traj["x"]))] for traj in result["trajectories"]]
 
         # Prepare the VideoWriter.
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         fps = int(fps)
         writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
 
@@ -371,13 +529,25 @@ class VisualizationPipeline:
                     x = wrap_coordinates(x, x_min, x_max)
                     y = wrap_coordinates(y, y_min, y_max)
                 segs = seg_indices[traj_idx]
-                for (start, end) in segs:
+                for start, end in segs:
                     if frame > start and (end - start) > 1:
                         seg_end = min(end, frame)
-                        pts = np.array([sim_to_pixel(xx, yy) for xx, yy in zip(x[start:seg_end], y[start:seg_end])], dtype=np.int32)
+                        pts = np.array(
+                            [
+                                sim_to_pixel(xx, yy)
+                                for xx, yy in zip(x[start:seg_end], y[start:seg_end])
+                            ],
+                            dtype=np.int32,
+                        )
                         if pts.shape[0] >= 2:
-                            cv2.polylines(img, [pts], isClosed=False, color=colors[traj_idx],
-                                        thickness=1, lineType=cv2.LINE_AA)
+                            cv2.polylines(
+                                img,
+                                [pts],
+                                isClosed=False,
+                                color=colors[traj_idx],
+                                thickness=1,
+                                lineType=cv2.LINE_AA,
+                            )
 
             # Draw each animal as an ellipse and sensor markers.
             for traj in result["trajectories"]:
@@ -393,13 +563,31 @@ class VisualizationPipeline:
                 cur_heading = traj["heading"][cur_idx]
                 # OpenCV's ellipse function expects the angle in degrees (clockwise, so we use negative).
                 angle_deg = -math.degrees(cur_heading)
-                cv2.ellipse(img, center, ellipse_axes, angle_deg, 0, 360, colors[result["trajectories"].index(traj)], thickness=1, lineType=cv2.LINE_AA)
-                
+                cv2.ellipse(
+                    img,
+                    center,
+                    ellipse_axes,
+                    angle_deg,
+                    0,
+                    360,
+                    colors[result["trajectories"].index(traj)],
+                    thickness=1,
+                    lineType=cv2.LINE_AA,
+                )
+
                 # Draw sensor markers as circles.
-                left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
-                left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
-                right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
-                right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
+                left_dx = cfg.antenna_left_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
+                left_dy = cfg.antenna_left_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
+                right_dx = cfg.antenna_right_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
+                right_dy = cfg.antenna_right_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
                 left_x = cur_x + left_dx
                 left_y = cur_y + left_dy
                 right_x = cur_x + right_dx
@@ -412,19 +600,41 @@ class VisualizationPipeline:
                 scale = 10
                 radius_left = max(3, int(scale * np.log1p(odor_left)))
                 radius_right = max(3, int(scale * np.log1p(odor_right)))
-                cv2.circle(img, left_center, radius_left, color=(255, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
-                cv2.circle(img, right_center, radius_right, color=(0, 0, 255), thickness=-1, lineType=cv2.LINE_AA)
+                cv2.circle(
+                    img,
+                    left_center,
+                    radius_left,
+                    color=(255, 0, 0),
+                    thickness=-1,
+                    lineType=cv2.LINE_AA,
+                )
+                cv2.circle(
+                    img,
+                    right_center,
+                    radius_right,
+                    color=(0, 0, 255),
+                    thickness=-1,
+                    lineType=cv2.LINE_AA,
+                )
 
             # Draw time information.
             time_str = format_time(frame)
-            cv2.putText(img, f"Time: {time_str}", (10, img_height - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 50), thickness=2, lineType=cv2.LINE_AA)
-            
+            cv2.putText(
+                img,
+                f"Time: {time_str}",
+                (10, img_height - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (50, 50, 50),
+                thickness=2,
+                lineType=cv2.LINE_AA,
+            )
+
             if display:
-                cv2.imshow('Simulation Animation', img)
-                if cv2.waitKey(interval) & 0xFF == ord('q'):
+                cv2.imshow("Simulation Animation", img)
+                if cv2.waitKey(interval) & 0xFF == ord("q"):
                     break
-            
+
             writer.write(img)
 
         writer.release()
@@ -432,24 +642,31 @@ class VisualizationPipeline:
             cv2.destroyAllWindows()
         logger.info(f"OpenCV animation saved to {output_file}")
 
-    def animate_enhanced_trajectory_opencv(self, sim_index: int = 0, fps: int = 60, frame_skip: int = 5,
-                                        wraparound: bool = False, output_file: str = "animation.mp4",
-                                        display: bool = False, progress: bool = True) -> None:
+    def animate_enhanced_trajectory_opencv(
+        self,
+        sim_index: int = 0,
+        fps: int = 60,
+        frame_skip: int = 5,
+        wraparound: bool = False,
+        output_file: str = "animation.mp4",
+        display: bool = False,
+        progress: bool = True,
+    ) -> None:
         """
-        OpenCV-based animation that caches cumulative trajectory tracks while avoiding 
-        drawing spurious connecting lines when using periodic (wraparound) boundaries.
-        
-        When wraparound is enabled, the trajectory for each animal is segmented (using 
-        segment_trajectory_with_indices) so that jumps across the boundary are not drawn.
-        
-        Parameters:
-            sim_index (int): Index of the simulation replicate.
-            fps (int): Frames per second for the output video.
-            frame_skip (int): Process every Nth frame.
-            wraparound (bool): If True, use segmentation to avoid drawing across wrap boundaries.
-            output_file (str): Path to the output video file.
-            display (bool): If True, display the animation in an OpenCV window.
-            progress (bool): If True, display a progress bar.
+        Create an optimized OpenCV-based animation.
+
+        This version caches cumulative trajectory tracks to avoid redrawing the entire history
+        at every frame, significantly improving performance. It also handles wraparound boundaries
+        correctly by segmenting trajectories.
+
+        Args:
+            sim_index (int): Index of the simulation replicate. Defaults to 0.
+            fps (int): Frames per second for the output video. Defaults to 60.
+            frame_skip (int): Process every Nth frame. Defaults to 5.
+            wraparound (bool): If True, use segmentation to avoid drawing across wrap boundaries. Defaults to False.
+            output_file (str): Path to the output video file. Defaults to "animation.mp4".
+            display (bool): If True, display the animation in an OpenCV window. Defaults to False.
+            progress (bool): If True, display a progress bar. Defaults to True.
         """
 
         # Get simulation results and configuration.
@@ -482,7 +699,9 @@ class VisualizationPipeline:
             pts = [sim_to_pixel(x, y) for x, y in zip(xs_wrapped, ys_wrapped)]
             pixel_trajs.append(pts)
             if wraparound:
-                segs = segment_trajectory_with_indices(xs_wrapped, ys_wrapped, x_min, x_max, y_min, y_max)
+                segs = segment_trajectory_with_indices(
+                    xs_wrapped, ys_wrapped, x_min, x_max, y_min, y_max
+                )
             else:
                 segs = [(0, len(pts))]
             segments_list.append(segs)
@@ -493,14 +712,19 @@ class VisualizationPipeline:
         # We store a list (one per animal) of lists (one per segment) with the last drawn index.
         last_drawn = []
         for segs in segments_list:
-            last_drawn.append([s[0] for s in segs])  # initialize at each segment's start
+            last_drawn.append(
+                [s[0] for s in segs]
+            )  # initialize at each segment's start
 
         # Get colors for each trajectory.
-        cmap = plt.cm.get_cmap('rainbow', len(result["trajectories"]))
-        colors = [tuple(int(255 * c) for c in cmap(i)[:3][::-1]) for i in range(len(result["trajectories"]))]
+        cmap = plt.cm.get_cmap("rainbow", len(result["trajectories"]))
+        colors = [
+            tuple(int(255 * c) for c in cmap(i)[:3][::-1])
+            for i in range(len(result["trajectories"]))
+        ]
 
         # Set up video writer.
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(output_file, fourcc, fps, (img_width, img_height))
 
         total_frames = len(result["trajectories"][0]["x"])
@@ -519,7 +743,14 @@ class VisualizationPipeline:
                         # Only draw if new points exist.
                         if seg_end - last_drawn[a][s_idx] >= 1:
                             for k in range(last_drawn[a][s_idx], seg_end - 1):
-                                cv2.line(track_img, pts[k], pts[k+1], colors[a], thickness=1, lineType=cv2.LINE_AA)
+                                cv2.line(
+                                    track_img,
+                                    pts[k],
+                                    pts[k + 1],
+                                    colors[a],
+                                    thickness=1,
+                                    lineType=cv2.LINE_AA,
+                                )
                             last_drawn[a][s_idx] = seg_end
 
             # Start with a copy of the cached track background.
@@ -532,21 +763,43 @@ class VisualizationPipeline:
                 cur_idx = frame - 1
                 # For wraparound, use wrapped coordinates.
                 if wraparound:
-                    cur_x = wrap_coordinates(np.array([traj["x"][cur_idx]]), x_min, x_max)[0]
-                    cur_y = wrap_coordinates(np.array([traj["y"][cur_idx]]), y_min, y_max)[0]
+                    cur_x = wrap_coordinates(
+                        np.array([traj["x"][cur_idx]]), x_min, x_max
+                    )[0]
+                    cur_y = wrap_coordinates(
+                        np.array([traj["y"][cur_idx]]), y_min, y_max
+                    )[0]
                 else:
                     cur_x = traj["x"][cur_idx]
                     cur_y = traj["y"][cur_idx]
                 center = sim_to_pixel(cur_x, cur_y)
                 cur_heading = traj["heading"][cur_idx]
                 angle_deg = -math.degrees(cur_heading)
-                cv2.ellipse(frame_img, center, (20, 10), angle_deg, 0, 360, colors[traj_idx], thickness=1, lineType=cv2.LINE_AA)
-                
+                cv2.ellipse(
+                    frame_img,
+                    center,
+                    (20, 10),
+                    angle_deg,
+                    0,
+                    360,
+                    colors[traj_idx],
+                    thickness=1,
+                    lineType=cv2.LINE_AA,
+                )
+
                 # Compute antenna positions.
-                left_dx = cfg.antenna_left_offset[0] * math.cos(cur_heading) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
-                left_dy = cfg.antenna_left_offset[0] * math.sin(cur_heading) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
-                right_dx = cfg.antenna_right_offset[0] * math.cos(cur_heading) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
-                right_dy = cfg.antenna_right_offset[0] * math.sin(cur_heading) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
+                left_dx = cfg.antenna_left_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_left_offset[1] * math.sin(cur_heading)
+                left_dy = cfg.antenna_left_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_left_offset[1] * math.cos(cur_heading)
+                right_dx = cfg.antenna_right_offset[0] * math.cos(
+                    cur_heading
+                ) - cfg.antenna_right_offset[1] * math.sin(cur_heading)
+                right_dy = cfg.antenna_right_offset[0] * math.sin(
+                    cur_heading
+                ) + cfg.antenna_right_offset[1] * math.cos(cur_heading)
                 left_x = cur_x + left_dx
                 left_y = cur_y + left_dy
                 right_x = cur_x + right_dx
@@ -558,8 +811,22 @@ class VisualizationPipeline:
                 scale = 10
                 radius_left = max(3, int(scale * np.log1p(odor_left)))
                 radius_right = max(3, int(scale * np.log1p(odor_right)))
-                cv2.circle(frame_img, left_pt, radius_left, (255, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
-                cv2.circle(frame_img, right_pt, radius_right, (0, 0, 255), thickness=-1, lineType=cv2.LINE_AA)
+                cv2.circle(
+                    frame_img,
+                    left_pt,
+                    radius_left,
+                    (255, 0, 0),
+                    thickness=-1,
+                    lineType=cv2.LINE_AA,
+                )
+                cv2.circle(
+                    frame_img,
+                    right_pt,
+                    radius_right,
+                    (0, 0, 255),
+                    thickness=-1,
+                    lineType=cv2.LINE_AA,
+                )
 
             # Draw time information.
             t_seconds = frame / cfg.fps
@@ -567,12 +834,20 @@ class VisualizationPipeline:
             minutes = int((t_seconds % 3600) // 60)
             seconds = t_seconds % 60
             time_str = f"{hours:02d}:{minutes:02d}:{seconds:05.2f}"
-            cv2.putText(frame_img, f"Time: {time_str}", (10, img_height - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 50), thickness=2, lineType=cv2.LINE_AA)
+            cv2.putText(
+                frame_img,
+                f"Time: {time_str}",
+                (10, img_height - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (50, 50, 50),
+                thickness=2,
+                lineType=cv2.LINE_AA,
+            )
 
             if display:
-                cv2.imshow('Simulation Animation', frame_img)
-                if cv2.waitKey(int(1000 / fps)) & 0xFF == ord('q'):
+                cv2.imshow("Simulation Animation", frame_img)
+                if cv2.waitKey(int(1000 / fps)) & 0xFF == ord("q"):
                     break
 
             writer.write(frame_img)
