@@ -61,6 +61,7 @@ nav:
     - Parallel Simulations: how-to/parallel_simulations.md
     - Visualization: how-to/visualization.md
     - Data Analysis: how-to/data_analysis.md
+    - External Odor Sources: how-to/external_odor_sources.md
   - API Reference:
     - Overview: api/index.md
     - Simulation:
@@ -70,8 +71,10 @@ nav:
       - Config: api/sim/config.md
       - Odor Perception: api/sim/odor_perception.md
       - Odor Release: api/sim/odor_release.md
+      - Odor Sources: api/sim/odor_sources.md
       - Runner: api/sim/runner.md
       - Saver: api/sim/saver.md
       - Visualization: api/sim/visualization.md
       - Directional Persistence: api/sim/directional_persistence.md
     - RDP Client: api/rdp_client.md
+
