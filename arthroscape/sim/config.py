@@ -201,7 +201,7 @@ class SimulationConfig:
     # Odor perception parameters
     odor_perception_factory: Callable[[], AgentOdorPerception] = field(
         # default_factory=lambda: NoAdaptationPerception
-        default_factory=lambda: functools.partial(LowPassPerception, tau=0.05)  # 50 ms
+        # default_factory=lambda: functools.partial(LowPassPerception, tau=0.05)  # 50 ms
         # default_factory=lambda: functools.partial(LeakAdaptationPerception, odor_integration_tau=0.02, adaptation_tau=0.1, adaptation_magnitude=2.0)
         # default_factory=lambda: functools.partial(AblatedLeakAdaptationPerception, odor_integration_tau=0.02, adaptation_tau=0.1, adaptation_magnitude=2.0, direction='left')
         # default_factory=lambda: functools.partial(AblatedPerception, direction='left')

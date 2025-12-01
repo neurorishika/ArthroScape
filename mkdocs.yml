@@ -52,6 +52,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Usage: usage.md
+  - Architecture & Internals: architecture.md
   - Tutorials:
     - Getting Started: tutorials/getting_started.md
     - Customizing the Arena: tutorials/custom_arena.md
