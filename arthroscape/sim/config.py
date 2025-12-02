@@ -177,7 +177,7 @@ class SimulationConfig:
 
     # Behavioral algorithm parameters (per second)
     turn_rate: float = 1.0  # Hz, base turning rate
-    asymmetry_factor: float = 10  # Increases turn rate when odor asymmetry is high
+    asymmetry_factor: float = 250  # Increases turn rate when odor asymmetry is high
     error_rate: float = 0  # Hz, Probability of turning in the wrong direction
     odor_driven_turn_scaler: float = (
         0.0  # Increases the turn angle based on odor asymmetry

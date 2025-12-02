@@ -644,19 +644,22 @@ def update_odor_vectorized_numba(
 
 
 @njit
-def get_odor_vectorized_numba(xs, ys, odor_grid, x_min, y_min, resolution, nx, ny):
+def _get_odor_vectorized_numba_dup(xs, ys, odor_grid, x_min, y_min, resolution, nx, ny):
     """
-    Numba-accelerated bilinear interpolation for odor values.
+    Duplicate definition - this function is unused.
 
-    :param xs: 1D NumPy array of x coordinates.
-    :param ys: 1D NumPy array of y coordinates.
-    :param odor_grid: 2D NumPy array representing the odor grid.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns in grid.
-    :param ny: Number of rows in grid.
-    :return: 1D NumPy array of interpolated odor values.
+    Args:
+        xs (np.ndarray): 1D NumPy array of x coordinates.
+        ys (np.ndarray): 1D NumPy array of y coordinates.
+        odor_grid (np.ndarray): 2D NumPy array representing the odor grid.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns in grid.
+        ny (int): Number of rows in grid.
+
+    Returns:
+        np.ndarray: 1D NumPy array of interpolated odor values.
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -683,19 +686,22 @@ def get_odor_vectorized_numba(xs, ys, odor_grid, x_min, y_min, resolution, nx, n
 
 
 @njit
-def is_free_vectorized_numba(xs, ys, wall_mask, x_min, y_min, resolution, nx, ny):
+def _is_free_vectorized_numba_dup(xs, ys, wall_mask, x_min, y_min, resolution, nx, ny):
     """
-    Numba-accelerated check of free space for multiple positions.
+    Duplicate definition - this function is unused.
 
-    :param xs: 1D array of x coordinates.
-    :param ys: 1D array of y coordinates.
-    :param wall_mask: 2D boolean array indicating blocked cells.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns.
-    :param ny: Number of rows.
-    :return: Boolean array (True if free).
+    Args:
+        xs (np.ndarray): 1D array of x coordinates.
+        ys (np.ndarray): 1D array of y coordinates.
+        wall_mask (np.ndarray): 2D boolean array indicating blocked cells.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns.
+        ny (int): Number of rows.
+
+    Returns:
+        np.ndarray: Boolean array (True if free).
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -710,23 +716,25 @@ def is_free_vectorized_numba(xs, ys, wall_mask, x_min, y_min, resolution, nx, ny
 
 
 @njit
-def update_odor_vectorized_numba(
+def _update_odor_vectorized_numba_dup(
     odor_grid, xs, ys, odors, x_min, y_min, resolution, nx, ny
 ):
     """
-    Numba-accelerated update of the odor grid given multiple deposit positions.
+    Duplicate definition - this function is unused.
 
-    This function uses np.add.at to handle repeated indices.
+    Args:
+        odor_grid (np.ndarray): 2D array representing the odor grid.
+        xs (np.ndarray): 1D array of x deposit positions.
+        ys (np.ndarray): 1D array of y deposit positions.
+        odors (np.ndarray): 1D array of odor values to add.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns.
+        ny (int): Number of rows.
 
-    :param odor_grid: 2D array representing the odor grid.
-    :param xs: 1D array of x deposit positions.
-    :param ys: 1D array of y deposit positions.
-    :param odors: 1D array of odor values to add.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns.
-    :param ny: Number of rows.
+    Returns:
+        np.ndarray: The updated odor grid.
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -871,10 +879,14 @@ class PeriodicSquareArena(GridArena):
         """
         Convert arrays of world coordinates to grid indices and fractional parts.
 
-        :param x: NumPy array of x coordinates.
-        :param y: NumPy array of y coordinates.
-        :return: Tuple of arrays (i, j, fi, fj) where i and j are integer grid indices,
-                 and fi and fj are the fractional parts.
+        Args:
+            x (np.ndarray): NumPy array of x coordinates.
+            y (np.ndarray): NumPy array of y coordinates.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Tuple of arrays
+                (i, j, fi, fj) where i and j are integer grid indices, and fi and fj
+                are the fractional parts.
         """
         return world_to_grid_periodic_vectorized_numba(
             x, y, self.x_min, self.y_min, self.resolution, self.nx, self.ny
@@ -899,9 +911,12 @@ class PeriodicSquareArena(GridArena):
         """
         Vectorized version of get_odor using bilinear interpolation.
 
-        :param xs: NumPy array of x coordinates.
-        :param ys: NumPy array of y coordinates.
-        :return: NumPy array of interpolated odor values.
+        Args:
+            xs (np.ndarray): NumPy array of x coordinates.
+            ys (np.ndarray): NumPy array of y coordinates.
+
+        Returns:
+            np.ndarray: NumPy array of interpolated odor values.
         """
         return get_odor_periodic_vectorized_numba(
             xs,
@@ -922,9 +937,13 @@ class PeriodicSquareArena(GridArena):
         """
         Vectorized version of is_free.
 
-        :param xs: NumPy array of x coordinates.
-        :param ys: NumPy array of y coordinates.
-        :return: Boolean NumPy array indicating free (True) or blocked (False) for each coordinate.
+        Args:
+            xs (np.ndarray): NumPy array of x coordinates.
+            ys (np.ndarray): NumPy array of y coordinates.
+
+        Returns:
+            np.ndarray: Boolean NumPy array indicating free (True) or blocked (False)
+                for each coordinate.
         """
         return is_free_periodic_vectorized_numba(
             xs,
@@ -947,9 +966,10 @@ class PeriodicSquareArena(GridArena):
         """
         Vectorized update: deposit odor values at multiple positions.
 
-        :param xs: 1D NumPy array of x coordinates.
-        :param ys: 1D NumPy array of y coordinates.
-        :param odors: 1D NumPy array of odor values.
+        Args:
+            xs (np.ndarray): 1D NumPy array of x coordinates.
+            ys (np.ndarray): 1D NumPy array of y coordinates.
+            odors (np.ndarray): 1D NumPy array of odor values.
         """
         self.odor_grid = update_odor_periodic_vectorized_numba(
             self.odor_grid,
@@ -981,12 +1001,15 @@ class PeriodicSquareArena(GridArena):
         """
         Vectorized deposition: deposit the same kernel at multiple positions.
 
-        This method uses a vectorized world-to-grid conversion and then loops over the deposit positions.
-        Note: Further vectorization would require advanced indexing and careful boundary handling.
+        This method uses a vectorized world-to-grid conversion and then loops over
+        the deposit positions. Note: Further vectorization would require advanced
+        indexing and careful boundary handling.
 
-        :param xs: 1D NumPy array of x coordinates for deposit centers.
-        :param ys: 1D NumPy array of y coordinates for deposit centers.
-        :param kernel: 2D NumPy array representing the kernel (assumed square, odd dimensions).
+        Args:
+            xs (np.ndarray): 1D NumPy array of x coordinates for deposit centers.
+            ys (np.ndarray): 1D NumPy array of y coordinates for deposit centers.
+            kernel (np.ndarray): 2D NumPy array representing the kernel (assumed
+                square, odd dimensions).
         """
         i, j, _, _ = self.world_to_grid_vectorized(xs, ys)
         self.odor_grid = deposit_odor_kernels_periodic_vectorized_numba(
@@ -1052,18 +1075,30 @@ class PeriodicSquareArena(GridArena):
 
 
 @njit
-def world_to_grid_periodic_vectorized_numba(xs, ys, x_min, y_min, resolution, nx, ny):
+def world_to_grid_periodic_vectorized_numba(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    x_min: float,
+    y_min: float,
+    resolution: float,
+    nx: int,
+    ny: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Numba-accelerated conversion of world coordinates to grid indices and fractional parts.
 
-    :param xs: 1D NumPy array of x coordinates.
-    :param ys: 1D NumPy array of y coordinates.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns in grid.
-    :param ny: Number of rows in grid.
-    :return: Tuple of 1D NumPy arrays (i, j, fi, fj).
+    Args:
+        xs (np.ndarray): 1D NumPy array of x coordinates.
+        ys (np.ndarray): 1D NumPy array of y coordinates.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns in grid.
+        ny (int): Number of rows in grid.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Tuple of 1D NumPy
+            arrays (i, j, fi, fj).
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -1076,20 +1111,30 @@ def world_to_grid_periodic_vectorized_numba(xs, ys, x_min, y_min, resolution, nx
 
 @njit
 def get_odor_periodic_vectorized_numba(
-    xs, ys, odor_grid, x_min, y_min, resolution, nx, ny
-):
+    xs: np.ndarray,
+    ys: np.ndarray,
+    odor_grid: np.ndarray,
+    x_min: float,
+    y_min: float,
+    resolution: float,
+    nx: int,
+    ny: int,
+) -> np.ndarray:
     """
-    Numba-accelerated bilinear interpolation for odor values.
+    Numba-accelerated bilinear interpolation for odor values with periodic boundaries.
 
-    :param xs: 1D NumPy array of x coordinates.
-    :param ys: 1D NumPy array of y coordinates.
-    :param odor_grid: 2D NumPy array representing the odor grid.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns in grid.
-    :param ny: Number of rows in grid.
-    :return: 1D NumPy array of interpolated odor values.
+    Args:
+        xs (np.ndarray): 1D NumPy array of x coordinates.
+        ys (np.ndarray): 1D NumPy array of y coordinates.
+        odor_grid (np.ndarray): 2D NumPy array representing the odor grid.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns in grid.
+        ny (int): Number of rows in grid.
+
+    Returns:
+        np.ndarray: 1D NumPy array of interpolated odor values.
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -1116,20 +1161,30 @@ def get_odor_periodic_vectorized_numba(
 
 @njit
 def is_free_periodic_vectorized_numba(
-    xs, ys, wall_mask, x_min, y_min, resolution, nx, ny
-):
+    xs: np.ndarray,
+    ys: np.ndarray,
+    wall_mask: np.ndarray,
+    x_min: float,
+    y_min: float,
+    resolution: float,
+    nx: int,
+    ny: int,
+) -> np.ndarray:
     """
-    Numba-accelerated check of free space for multiple positions.
+    Numba-accelerated check of free space for multiple positions with periodic boundaries.
 
-    :param xs: 1D array of x coordinates.
-    :param ys: 1D array of y coordinates.
-    :param wall_mask: 2D boolean array indicating blocked cells.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns.
-    :param ny: Number of rows.
-    :return: Boolean array (True if free).
+    Args:
+        xs (np.ndarray): 1D array of x coordinates.
+        ys (np.ndarray): 1D array of y coordinates.
+        wall_mask (np.ndarray): 2D boolean array indicating blocked cells.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns.
+        ny (int): Number of rows.
+
+    Returns:
+        np.ndarray: Boolean array (True if free).
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -1143,22 +1198,32 @@ def is_free_periodic_vectorized_numba(
 
 @njit
 def update_odor_periodic_vectorized_numba(
-    odor_grid, xs, ys, odors, x_min, y_min, resolution, nx, ny
-):
+    odor_grid: np.ndarray,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    odors: np.ndarray,
+    x_min: float,
+    y_min: float,
+    resolution: float,
+    nx: int,
+    ny: int,
+) -> np.ndarray:
     """
-    Numba-accelerated update of the odor grid given multiple deposit positions.
+    Numba-accelerated update of the odor grid with periodic boundaries.
 
-    This function uses np.add.at to handle repeated indices.
+    Args:
+        odor_grid (np.ndarray): 2D array representing the odor grid.
+        xs (np.ndarray): 1D array of x deposit positions.
+        ys (np.ndarray): 1D array of y deposit positions.
+        odors (np.ndarray): 1D array of odor values to add.
+        x_min (float): Minimum x of the grid.
+        y_min (float): Minimum y of the grid.
+        resolution (float): Grid resolution.
+        nx (int): Number of columns.
+        ny (int): Number of rows.
 
-    :param odor_grid: 2D array representing the odor grid.
-    :param xs: 1D array of x deposit positions.
-    :param ys: 1D array of y deposit positions.
-    :param odors: 1D array of odor values to add.
-    :param x_min: Minimum x of the grid.
-    :param y_min: Minimum y of the grid.
-    :param resolution: Grid resolution.
-    :param nx: Number of columns.
-    :param ny: Number of rows.
+    Returns:
+        np.ndarray: The updated odor grid.
     """
     gx = (xs - x_min) / resolution
     gy = (ys - y_min) / resolution
@@ -1170,9 +1235,27 @@ def update_odor_periodic_vectorized_numba(
 
 
 @njit
-def deposit_odor_kernel_periodic_direct(odor_grid, i_center, j_center, kernel, ny, nx):
+def deposit_odor_kernel_periodic_direct(
+    odor_grid: np.ndarray,
+    i_center: int,
+    j_center: int,
+    kernel: np.ndarray,
+    ny: int,
+    nx: int,
+) -> np.ndarray:
     """
     Numba-accelerated deposition of a single kernel at a grid index with periodic wrapping.
+
+    Args:
+        odor_grid (np.ndarray): 2D array of the odor grid.
+        i_center (int): Center row index for deposit.
+        j_center (int): Center column index for deposit.
+        kernel (np.ndarray): 2D array representing the deposition kernel.
+        ny (int): Number of rows in odor_grid.
+        nx (int): Number of columns in odor_grid.
+
+    Returns:
+        np.ndarray: Updated odor_grid.
     """
     ksize = kernel.shape[0]
     half_size = ksize // 2
@@ -1187,17 +1270,26 @@ def deposit_odor_kernel_periodic_direct(odor_grid, i_center, j_center, kernel, n
 
 @njit
 def deposit_odor_kernels_periodic_vectorized_numba(
-    odor_grid, i_centers, j_centers, kernel, ny, nx
-):
+    odor_grid: np.ndarray,
+    i_centers: np.ndarray,
+    j_centers: np.ndarray,
+    kernel: np.ndarray,
+    ny: int,
+    nx: int,
+) -> np.ndarray:
     """
     Numba-accelerated vectorized deposition of the same kernel at multiple grid indices.
 
-    :param odor_grid: 2D array representing the odor grid.
-    :param i_centers: 1D array of center row indices.
-    :param j_centers: 1D array of center column indices.
-    :param kernel: 2D array representing the kernel.
-    :param ny: Number of rows in odor_grid.
-    :param nx: Number of columns in odor_grid.
+    Args:
+        odor_grid (np.ndarray): 2D array representing the odor grid.
+        i_centers (np.ndarray): 1D array of center row indices.
+        j_centers (np.ndarray): 1D array of center column indices.
+        kernel (np.ndarray): 2D array representing the kernel.
+        ny (int): Number of rows in odor_grid.
+        nx (int): Number of columns in odor_grid.
+
+    Returns:
+        np.ndarray: Updated odor_grid.
     """
     for idx in range(i_centers.size):
         odor_grid = deposit_odor_kernel_periodic_direct(

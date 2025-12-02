@@ -27,6 +27,18 @@ poetry run python scripts/run_simulation.py [OPTIONS]
 | `--parallel` | Run replicates in parallel | `False` |
 | `--save` | Custom path for the output `.h5` file | Auto-generated |
 
+### External Odor Source Options
+
+| Option | Description | Default |
+| :--- | :--- | :--- |
+| `--odor_image` | Path to an image file to use as static odor landscape | None |
+| `--odor_video` | Path to a video file to use as dynamic odor field | None |
+| `--odor_scale` | Scaling factor for external odor values | `1.0` |
+| `--odor_invert` | Invert the odor source (dark = high concentration) | `False` |
+| `--odor_mode` | How to apply odor (`replace`, `add`, `multiply`, `max`) | `replace` |
+| `--video_loop` | Loop the video when it ends | `False` |
+| `--video_sync` | Video sync mode (`one_to_one`, `video_fps`, `simulation_fps`) | `simulation_fps` |
+
 ### Examples
 
 #### 1. Circular Arena with 5 Animals
@@ -52,6 +64,48 @@ Run 20 replicates of a single-animal simulation in parallel, without visualizati
 ```bash
 poetry run python scripts/run_simulation.py --arena pbc --animals 1 --replicates 20 --parallel
 ```
+
+#### 4. Using an Image as Odor Landscape
+
+Load a grayscale image as the odor map. Brighter pixels = higher concentration.
+
+```bash
+poetry run python scripts/run_simulation.py --arena pbc --animals 5 \
+    --odor_image path/to/odor_map.png --odor_scale 10.0 --visualize
+```
+
+#### 5. Inverting an Image (Dark = High Odor)
+
+If your image has dark regions representing high odor concentration, use `--odor_invert`.
+
+```bash
+poetry run python scripts/run_simulation.py --arena pbc --animals 5 \
+    --odor_image path/to/dark_plume.png --odor_invert --odor_scale 5.0
+```
+
+#### 6. Combining Image Odor with Agent Pheromone
+
+Add an image-based background odor while agents also release pheromone.
+
+```bash
+poetry run python scripts/run_simulation.py --arena pbc --animals 10 \
+    --odor_image food_source.png --odor_mode add --odor_scale 2.0 \
+    --odor_release constant --deposit_amount 0.1 --visualize
+```
+
+#### 7. Using a Video as Dynamic Odor Field
+
+Load a video where each frame represents the odor landscape at that time step.
+
+```bash
+poetry run python scripts/run_simulation.py --arena pbc --animals 5 \
+    --odor_video plume_recording.mp4 --odor_scale 3.0 --video_loop --visualize
+```
+
+!!! note "Video Odor Source Limitation"
+    The standard CLI runner applies only the first frame of the video as the initial odor state.
+    For true per-frame video updates, use a custom simulation loop with the Python API.
+    See the [External Odor Sources How-To Guide](how-to/external_odor_sources.md) for details.
 
 ## Graphical Analysis Tool
 

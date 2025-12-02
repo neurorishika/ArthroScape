@@ -76,5 +76,4 @@ nav:
       - Saver: api/sim/saver.md
       - Visualization: api/sim/visualization.md
       - Directional Persistence: api/sim/directional_persistence.md
-    - RDP Client: api/rdp_client.md
 

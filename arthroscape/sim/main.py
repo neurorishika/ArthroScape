@@ -20,6 +20,12 @@ from arthroscape.sim.arena import (
 )
 from arthroscape.sim.behavior import DefaultBehavior
 from arthroscape.sim.odor_release import DefaultOdorRelease, ConstantOdorRelease
+from arthroscape.sim.odor_sources import (
+    ImageOdorSource,
+    VideoOdorSource,
+    VideoOdorReleaseStrategy,
+    load_odor_from_image,
+)
 from arthroscape.sim.runner import run_simulations, run_simulations_vectorized
 from arthroscape.sim.visualization import VisualizationPipeline
 from arthroscape.sim.saver import save_simulation_results_hdf5
@@ -45,7 +51,15 @@ def get_default_save_path(args) -> str:
     """
     date_str = datetime.now().strftime("%m-%d-%Y")
     time_str = datetime.now().strftime("%H_%M_%S")
-    description = f"{time_str}_{args.arena}_arena_{args.animals}x{args.replicates}_{args.odor_release}"
+
+    # Build description string
+    odor_source_str = args.odor_release
+    if args.odor_image:
+        odor_source_str += "_img"
+    if args.odor_video:
+        odor_source_str += "_vid"
+
+    description = f"{time_str}_{args.arena}_arena_{args.animals}x{args.replicates}_{odor_source_str}"
     dir_path = os.path.join("data", "simulation", date_str, description)
     os.makedirs(dir_path, exist_ok=True)
     return os.path.join(dir_path, "results.h5")
@@ -125,6 +139,49 @@ def main():
         action="store_true",
         help="Run the simulation in non-vectorized mode",
     )
+    # External odor source options
+    parser.add_argument(
+        "--odor_image",
+        type=str,
+        default="",
+        help="Path to an image file to use as static odor landscape",
+    )
+    parser.add_argument(
+        "--odor_video",
+        type=str,
+        default="",
+        help="Path to a video file to use as dynamic odor field",
+    )
+    parser.add_argument(
+        "--odor_scale",
+        type=float,
+        default=1.0,
+        help="Scaling factor for external odor source values (default: 1.0)",
+    )
+    parser.add_argument(
+        "--odor_invert",
+        action="store_true",
+        help="Invert external odor source (dark becomes high concentration)",
+    )
+    parser.add_argument(
+        "--odor_mode",
+        type=str,
+        default="replace",
+        choices=["replace", "add", "multiply", "max"],
+        help="How to apply external odor: 'replace', 'add', 'multiply', or 'max'",
+    )
+    parser.add_argument(
+        "--video_loop",
+        action="store_true",
+        help="Loop the odor video when it ends (default: no loop)",
+    )
+    parser.add_argument(
+        "--video_sync",
+        type=str,
+        default="simulation_fps",
+        choices=["one_to_one", "video_fps", "simulation_fps"],
+        help="Video synchronization mode: 'one_to_one', 'video_fps', or 'simulation_fps'",
+    )
     args = parser.parse_args()
 
     # Create simulation configuration.
@@ -160,6 +217,41 @@ def main():
     else:
         raise ValueError("Unknown arena type selected.")
 
+    # Apply external odor source if provided
+    video_strategy = None
+    if args.odor_image and args.odor_video:
+        raise ValueError("Cannot use both --odor_image and --odor_video. Choose one.")
+
+    if args.odor_image:
+        if not os.path.exists(args.odor_image):
+            raise FileNotFoundError(f"Odor image not found: {args.odor_image}")
+        logger.info(f"Loading odor landscape from image: {args.odor_image}")
+        image_source = ImageOdorSource(args.odor_image, invert=args.odor_invert)
+        image_source.apply_to_arena(arena, mode=args.odor_mode, scale=args.odor_scale)
+        logger.info(
+            f"Applied image odor source (scale={args.odor_scale}, "
+            f"mode={args.odor_mode}, invert={args.odor_invert})"
+        )
+
+    if args.odor_video:
+        if not os.path.exists(args.odor_video):
+            raise FileNotFoundError(f"Odor video not found: {args.odor_video}")
+        logger.info(f"Loading dynamic odor field from video: {args.odor_video}")
+        video_strategy = VideoOdorReleaseStrategy(
+            args.odor_video,
+            arena,
+            mode=args.odor_mode,
+            scale=args.odor_scale,
+            sync_mode=args.video_sync,
+            simulation_fps=config.fps,
+            loop=args.video_loop,
+            invert=args.odor_invert,
+        )
+        logger.info(
+            f"Video odor source configured (scale={args.odor_scale}, "
+            f"mode={args.odor_mode}, sync={args.video_sync}, loop={args.video_loop})"
+        )
+
     # Choose odor release strategy.
     if args.odor_release == "none":
         odor_release_strategy = DefaultOdorRelease()
@@ -171,6 +263,17 @@ def main():
         raise ValueError("Unknown odor release strategy selected.")
 
     logger.info("Starting simulation...")
+
+    # Note: Video odor sources require custom simulation loops for per-frame updates
+    if video_strategy is not None:
+        logger.warning(
+            "Video odor source detected. Note: The standard runners apply the first "
+            "frame only. For dynamic video updates, use a custom simulation loop with "
+            "video_strategy.update(arena, frame_index) called each frame."
+        )
+        # Apply the first frame of the video to the arena
+        video_strategy.update(arena, 0)
+
     if args.dont_vectorize:
         simulation_results = run_simulations(
             config,
@@ -233,53 +336,6 @@ def main():
 
         logger.info(f"Visualizations saved to {plots_path}")
 
-
-if __name__ == "__main__":
-    main()
-    logger.info(f"Simulation results saved to {args.save}")
-
-    # If visualization is enabled, save plots for each replicate.
-    if args.visualize:
-        plots_dir = get_default_plots_path(args, args.save)
-        # Create a VisualizationPipeline instance with all replicates.
-        viz = VisualizationPipeline(
-            sim_results=simulation_results, config=config, arena=arena
-        )
-        # For each replicate, save separate plots in a subdirectory.
-        for rep_index in range(len(simulation_results)):
-            rep_plots_dir = os.path.join(plots_dir, f"replicate_{rep_index}")
-            os.makedirs(rep_plots_dir, exist_ok=True)
-
-            # Save trajectory plot.
-            traj_plot_path = os.path.join(rep_plots_dir, "trajectories.png")
-            viz.plot_trajectories_with_odor(
-                sim_index=rep_index,
-                show=False,
-                save_path=traj_plot_path,
-                wraparound=True if args.arena in ["pbc", "pbc-line"] else False,
-            )
-            # Save final odor grid plot.
-            odor_grid_path = os.path.join(rep_plots_dir, "final_odor_grid.png")
-            viz.plot_final_odor_grid(show=False, save_path=odor_grid_path)
-            # Save odor time series plot.
-            odor_ts_path = os.path.join(rep_plots_dir, "odor_time_series.png")
-            viz.plot_odor_time_series(
-                sim_index=rep_index, show=False, save_path=odor_ts_path
-            )
-            # # Save animation.
-            animation_path = os.path.join(rep_plots_dir, "trajectory_animation.mp4")
-            viz.animate_enhanced_trajectory_opencv(
-                sim_index=rep_index,
-                fps=config.fps,
-                frame_skip=30,
-                output_file=animation_path,
-                wraparound=True if args.arena in ["pbc", "pbc-line"] else False,
-                display=True,
-                progress=True,
-            )
-            logger.info(
-                f"Saved plots and animation for replicate {rep_index} in {rep_plots_dir}"
-            )
 
 if __name__ == "__main__":
     main()
