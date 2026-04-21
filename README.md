@@ -45,6 +45,18 @@ The framework enables exploration of how individual-level sensorimotor rules giv
 
 ---
 
+## 📸 Gallery
+
+<div align="center">
+<img src="https://github.com/user-attachments/assets/1a569b2b-d94e-4a88-aaa3-b1d98aeea896" width="720"/>
+<br><br>
+<img src="https://github.com/user-attachments/assets/646bb900-c0e3-43c4-b604-0e76bdf2f912" width="720"/>
+<br><br>
+<img src="https://github.com/user-attachments/assets/044297a8-813a-4939-911d-90a9065698b1" width="720"/>
+</div>
+
+---
+
 ## 🔬 Example Behavior: Osmotropotaxis (Default)
 
 ArthroScape ships with a default behavior that implements **osmotropotaxis** — a biologically grounded navigation strategy where agents steer by comparing odor concentrations at their left and right sensors. This is one example of the behavior algorithms you can plug into the framework; any custom `BehaviorAlgorithm` subclass can replace it.
