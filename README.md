@@ -2,7 +2,7 @@
 
 <img src="https://github.com/user-attachments/assets/ced9c50a-e1db-4963-9bd1-6f9ff983c9f1" alt="ArthroScape Logo" width="560"/>
 
-### *A GPU-Accelerated Agent-Based Simulator for Arthropod Navigation & Collective Behavior*
+### *A General-Purpose Agent-Based Simulator for Arthropod Navigation & Collective Behavior*
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Poetry](https://img.shields.io/badge/Managed%20with-Poetry-60A5FA?style=for-the-badge&logo=python&logoColor=white)](https://python-poetry.org/)
@@ -17,13 +17,15 @@
 
 ## 📋 Overview
 
-**ArthroScape** is a high-performance, agent-based simulation framework for modeling the navigation and collective behavior of arthropods — including ants, flies, and other insects. It models individual locomotion using a biologically inspired **osmotropotaxis algorithm**, supports pheromone trail dynamics with Gaussian diffusion, and scales to thousands of simultaneous agents via Numba-accelerated vectorized execution.
+**ArthroScape** is a high-performance, agent-based simulation framework for modeling the navigation and collective behavior of arthropods — including ants, flies, and other insects. It is built around a **pluggable behavior architecture**: any locomotion strategy can be implemented by subclassing the `BehaviorAlgorithm` abstract base class, making it straightforward to model a wide range of sensorimotor rules and navigation algorithms.
 
-The framework enables exploration of how individual-level sensorimotor rules (sensitivity, turning bias, stop/walk rates) give rise to emergent group-level phenomena such as collective foraging trails and aggregation.
+Out of the box, ArthroScape ships with a biologically inspired **osmotropotaxis** behavior as the default, which supports pheromone trail dynamics with Gaussian diffusion and scales to thousands of simultaneous agents via Numba-accelerated vectorized execution.
+
+The framework enables exploration of how individual-level sensorimotor rules give rise to emergent group-level phenomena such as collective foraging trails, aggregation, and more.
 
 <div align="center">
 <img src="https://github.com/user-attachments/assets/ee46a4bd-f8d4-481c-b28d-e47c91ef428b" alt="ArthroScape Overview Figure" width="720"/>
-<br><sub><i>The osmotropotaxis algorithm (left) and emergent collective behavior regimes (right): individual foraging, collective foraging, and aggregation arise from varying pheromone sensitivity and diffusion width.</i></sub>
+<br><sub><i>The default osmotropotaxis behavior (left) — one of many pluggable behaviors — and emergent collective behavior regimes (right): individual foraging, collective foraging, and aggregation arise from varying pheromone sensitivity and diffusion width.</i></sub>
 </div>
 
 ---
@@ -32,7 +34,7 @@ The framework enables exploration of how individual-level sensorimotor rules (se
 
 | Feature | Description |
 |---|---|
-| 🐜 **Osmotropotaxis Model** | Biologically grounded stop/walk/turn locomotion driven by bilateral odor sensing |
+| 🐜 **Pluggable Behavior System** | Implement any locomotion strategy by subclassing `BehaviorAlgorithm`; osmotropotaxis included as the default |
 | 🌿 **Pheromone Trail Dynamics** | Trail deposition with Gaussian diffusion; tunable diffusion width and sensitivity |
 | ⚡ **Numba Acceleration** | Vectorized simulation of thousands of agents with JIT-compiled loops |
 | 🏟️ **Flexible Arenas** | Circular arenas, periodic square arenas, and custom boundary conditions |
@@ -43,9 +45,11 @@ The framework enables exploration of how individual-level sensorimotor rules (se
 
 ---
 
-## 🔬 The Osmotropotaxis Algorithm
+## 🔬 Example Behavior: Osmotropotaxis (Default)
 
-Agents navigate by comparing odor concentrations at their left and right sensors. At each timestep an agent can:
+ArthroScape ships with a default behavior that implements **osmotropotaxis** — a biologically grounded navigation strategy where agents steer by comparing odor concentrations at their left and right sensors. This is one example of the behavior algorithms you can plug into the framework; any custom `BehaviorAlgorithm` subclass can replace it.
+
+In the default behavior, at each timestep an agent can:
 
 - **Stop** (at rate λ_stop) or **Walk** (at rate λ_walk)
 - **Turn** with rate λ_turn + |O_L − O_R| · sensitivity
